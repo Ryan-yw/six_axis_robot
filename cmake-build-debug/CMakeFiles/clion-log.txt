@@ -1,0 +1,16 @@
+C:\Users\Capoo\AppData\Local\JetBrains\CLion2020.2\cygwin_cmake\bin\cmake.exe -DCMAKE_BUILD_TYPE=Debug -G "CodeBlocks - Unix Makefiles" /cygdrive/c/Users/Capoo/Desktop/MEProjs/Proj_sixaxisrobot/pre-6axis_robot
+CMake Error at CMakeLists.txt:11 (find_package):
+  Could not find a package configuration file provided by "aris" with any of
+  the following names:
+
+    arisConfig.cmake
+    aris-config.cmake
+
+  Add the installation prefix of "aris" to CMAKE_PREFIX_PATH or set
+  "aris_DIR" to a directory containing one of the above files.  If "aris"
+  provides a separate development package or SDK, be sure it has been
+  installed.
+
+
+-- Configuring incomplete, errors occurred!
+See also "/cygdrive/c/Users/Capoo/Desktop/MEProjs/Proj_sixaxisrobot/pre-6axis_robot/cmake-build-debug/CMakeFiles/CMakeOutput.log".
