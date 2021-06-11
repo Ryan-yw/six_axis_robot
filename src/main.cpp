@@ -24,23 +24,24 @@ int main(int argc, char *argv[])
 
     auto&cs = aris::server::ControlServer::instance();
 
-    cs.loadXmlFile(xmlpath.string().c_str());	//加载kaanh.xml配置
+    //cs.loadXmlFile(xmlpath.string().c_str());
+    aris::core::fromXmlFile(cs, xmlpath);//加载kaanh.xml配置
     cs.resetPlanRoot(robot::createPlanRoot().release());//加载cmd配置
     //cs.saveXmlFile(xmlpath.string().c_str());	//save kaanh.xml配置
     cs.init();									//初始化
     aris::core::logDirectory(logpath);			//设置log路径
 
-    std::cout << cs.xmlString() << std::endl;
+    std::cout << aris::core::toXmlString(cs) << std::endl;
 
 
     auto &cal = cs.model().calculator();		//UI变量求解器
     kaanhconfig::createUserDataType(cal, 6);		//预定义UI界面变量集
-    kaanhconfig::createPauseTimeSpeed();		//初始化UI停止暂停功能参数
+//    kaanhconfig::createPauseTimeSpeed();		//初始化UI停止暂停功能参数
     //cs.start();
 
     //实时回调函数，每个实时周期调用一次//
     cs.setRtPlanPostCallback(kaanh::update_state);
-    g_model = cs.model();
+ //   g_model = cs.model();
 
     //开启windows下虚拟轴功能
 #ifdef WIN32

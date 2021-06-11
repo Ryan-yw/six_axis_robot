@@ -654,125 +654,27 @@ namespace robot {
                 "</Command>");
     }
 
-    struct SerialParam {
-        int32_t motor_=0;            //目标电机
-        int32_t airSwitch_=0;
-        std::vector<double> begin_pjs;            //起始位置
 
-    } SP;
-    int fd;
-    auto Serial::prepareNrt() -> void {
-            const char default_path[] = "/dev/ttyACM0";
-            static const u_int8_t start[6] = {0xA5,0x5A,0x04,0x01,0x05,0xAA};
-    }
-
-    auto Serial::executeRT() -> int {
-        SP.motor_ = int32Param("motor");
-        SP.airSwitch_ = int32Param("airSwitch");
-        static const char stop[6] = {'0','1','2','3','4','5'};
-        char path[] = "/dev/ttyACM0";
-//        path = "/dev/ttyACM0";
-        uint8_t buf[100] = {0};
-
-        //第二部分代码/
-
-        //获取串口设备描述符
-        printf("This is tty/usart demo.\n");
-        fd = open(path, O_RDWR | O_NOCTTY);
-      //  fcntl(fd,F_SETFL,0);
-        if (fd < 0)
-        {
-            printf("Fail to Open %s device\n", path);
-            return 0;
-        }
-
-        //第三部分代码/
-        struct termios opt;
-
-        //清空串口接收缓冲区
-        tcflush(fd, TCIOFLUSH);
-        // 获取串口参数opt
-        tcgetattr(fd, &opt);
-
-
-        //设置串口输出波特率
-        cfsetospeed(&opt, B9600);
-        //设置串口输入波特率
-        cfsetispeed(&opt, B9600);
-        //设置数据位数
-        opt.c_cflag &= ~CSIZE;
-        opt.c_cflag |= CS8;
-        //校验位
-        opt.c_cflag &= ~PARENB;
-        opt.c_iflag &= ~INPCK;
-        //设置停止位
-        opt.c_cflag &= ~CSTOPB;
-
-        //更新配置
-        tcsetattr(fd, TCSANOW, &opt);
-
-        std::cout << "Device ttyUSB0 is set to 9600bps,8N1\n" << std::endl;
-
-        //第四部分代码/
-     //   write(fd,stop,1);
-
-        tcflush(fd,TCIFLUSH);
-        tcflush(fd,TCOFLUSH);
-        tcflush(fd,TCIOFLUSH);
-        tcsetattr(fd, TCSANOW, &opt);
-        //write(fd,start,6);
-        if (SP.motor_ == 0 & SP.airSwitch_ ==0){
-            write(fd,stop,1);
-            std::cout << "s00" <<std::endl;
-        }
-        else if(SP.motor_ == 0 & SP.airSwitch_ ==1){
-            write(fd,stop+1,1);
-            std::cout << "s01" <<std::endl;
-        }
-        else if(SP.motor_ == 1 & SP.airSwitch_ ==0){
-            write(fd,stop+2,1);
-            std::cout << "s10" <<std::endl;
-        }
-        else if(SP.motor_ == 1 & SP.airSwitch_ ==1){
-            write(fd,stop+3,1);
-            std::cout << "s11" <<std::endl;
-        }
-    //        while (1)
-    //        {
-    //            write(fd,stop+2,1);
-    //            usleep(1000*1000);
-    //            write(fd,stop,1);
-    //            usleep(1000*1000);
-    //            //---------------------------------------------
-    //           read(fd,buf,20*sizeof (uint8_t) * data_length);
-    //           std::copy(buf,buf+40,imu_data);
-    //           std::cout<<imu_data<<std::endl;
-    //        }
-
-            return 0;
-        }
-    struct Serial::Imp {};
-    Serial::Serial(const std::string &name) : imp_(new Imp) {
-        //command().loadXmlStr(
-        aris::core::fromXmlString(command(),
-                "<Command name=\"sucker_ctrl\">"
-                "	<GroupParam>"
-                "	<Param name=\"motor\" default=\"1\" />"
-                "	<Param name=\"airSwitch\" default=\"1\" />"
-                "	</GroupParam>"
-                "</Command>");
-    }
 
 //------------------------//
 
+    ARIS_REGISTRATION
+            {
+                aris::core::class_<MoveS>("MoveS")
+                        .inherit<Plan>();
 
+                aris::core::class_<MoveTest>("MoveTest")
+                        .inherit<Plan>();
+
+
+            }
     auto createPlanRoot() -> std::unique_ptr <aris::plan::PlanRoot> {
         std::unique_ptr <aris::plan::PlanRoot> plan_root(new aris::plan::PlanRoot);
         //用户自己开发指令集
         plan_root->planPool().add<robot::MoveS>();
         plan_root->planPool().add<robot::MoveTest>();
         plan_root->planPool().add<robot::MoveJoint>();
-        plan_root->planPool().add<robot::Serial>();
+
 
         //aris库提供指令集
         plan_root->planPool().add<aris::plan::Enable>();

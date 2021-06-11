@@ -52,23 +52,7 @@ namespace robot
         double dir_{1};
     };
 
-//    class Serial : public aris::plan::Plan
-    class Serial : public aris::core::CloneObject<Serial, aris::plan::Plan>
-    {
-    public:
-        auto virtual prepareNrt()->void override;
-        auto virtual executeRT()->int override;
-
-        virtual ~Serial() override;
-        explicit Serial(const std::string &name = "sucker_ctrl");
-  //      ARIS_REGISTER_TYPE(Serial);
-
-//        char motor{"Off"};
-//        char airSwitch{"Off"};
-     private:
-        struct Imp;
-        aris::core::ImpPtr<Imp> imp_;
-    };
+//
 
     auto createPlanRoot()->std::unique_ptr<aris::plan::PlanRoot>;
 }
