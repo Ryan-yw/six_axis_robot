@@ -157,12 +157,13 @@ namespace robot {
 
     MoveS::~MoveS() = default;
 
-    MoveS::MoveS(const std::string &name) : Plan(name) {
+    MoveS::MoveS(const std::string &name) {
         //构造函数参数说明，构造函数通过xml的格式定义本条指令的接口，name表示参数名，default表示输入参数，abbreviation表示参数名的缩写(缩写只能单个字符)
         //1 GroupParam下面的各个节点都是输入参数，如果没有给定会使用默认值
         //2 UniqueParam下面的各个节点互斥，有且只能使用其中的一个
         //3 例如，通过terminal或者socket发送“mvs --pos=0.1”，控制器实际会按照mvs --pos=0.1rad --time=1s --timenum=2 --all执行
-        command().loadXmlStr(
+        //command().loadXmlStr(
+        aris::core::fromXmlString(command(),
                 "<Command name=\"mvs\">"
                 "	<GroupParam>"
                 "		<Param name=\"pos\" default=\"current_pos\"/>"
@@ -263,7 +264,8 @@ namespace robot {
     }
 
     MoveTest::MoveTest(const std::string &name) : Plan(name) {
-        command().loadXmlStr(
+        //command().loadXmlStr(
+        aris::core::fromXmlString(command(),
                 "<Command name=\"mv\">"
                 "	<Param name=\"direction\" default=\"1\" abbreviation=\"d\"/>"
                 "</Command>");
@@ -305,10 +307,13 @@ namespace robot {
         std::cout << "prepare begin" << std::endl;
 
         enable_mvJoint.store(true);
-        imp_->tool = &*model()->generalMotionPool()[0].makI().fatherPart().markerPool().findByName(
-                std::string(cmdParams().at("tool")));
-        imp_->wobj = &*model()->generalMotionPool()[0].makJ().fatherPart().markerPool().findByName(
-                std::string(cmdParams().at("wobj")));
+//        imp_->tool = &*model()->generalMotionPool()[0].makI().fatherPart().markerPool().findByName(
+//                std::string(cmdParams().at("tool")));
+//        imp_->wobj = &*model()->generalMotionPool()[0].makJ().fatherPart().markerPool().findByName(
+//                std::string(cmdParams().at("wobj")));
+
+        imp_->tool = &*model()->generalMotionPool()[0].makI()->fatherPart().findMarker(cmdParams().at("tool"));
+        imp_->tool = &*model()->generalMotionPool()[0].makJ()->fatherPart().findMarker(cmdParams().at("wobj"));
 
         for (auto cmd_param : cmdParams()) {
             if (cmd_param.first == "vellimit") {
@@ -365,9 +370,10 @@ namespace robot {
 
         // use lambda function to realize sub-function //
         auto get_force_data = [&](float *data) {
-            auto slave7 = dynamic_cast<aris::control::EthercatSlave &>(controller()->slavePool().at(FS_NUM));
+            //auto slave7 = dynamic_cast<aris::control::EthercatSlave &>(controller()->slavePool().at(FS_NUM));
             for (int i = 0; i < 6; i++) {
-                slave7.readPdo(0x6020, i + 11, data + i, 32);
+            //    slave7.readPdo(0x6020, i + 11, data + i, 32);
+                 this->ecController()->slavePool()[FS_NUM].readPdo(0x6020, i + 11, data + i, 32);
             }
         };
 
@@ -634,7 +640,8 @@ namespace robot {
     MoveJoint &MoveJoint::operator=(MoveJoint &&other) = default;
 
     MoveJoint::MoveJoint(const std::string &name) : Plan(name), imp_(new Imp) {
-        command().loadXmlStr(
+        //command().loadXmlStr(
+        aris::core::fromXmlString(command(),
                 "<Command name=\"movejoint\">"
                 "	<GroupParam>"
                 "		<Param name=\"vellimit\" default=\"{0.2,0.2,0.1,0.5,0.5,0.5}\"/>"
@@ -744,9 +751,10 @@ namespace robot {
 
             return 0;
         }
-
-    Serial::Serial(const std::string &name) : Plan(name) {
-        command().loadXmlStr(
+    struct Serial::Imp {};
+    Serial::Serial(const std::string &name) : imp_(new Imp) {
+        //command().loadXmlStr(
+        aris::core::fromXmlString(command(),
                 "<Command name=\"sucker_ctrl\">"
                 "	<GroupParam>"
                 "	<Param name=\"motor\" default=\"1\" />"
@@ -773,7 +781,7 @@ namespace robot {
         plan_root->planPool().add<aris::plan::Stop>();
         plan_root->planPool().add<aris::plan::Mode>();
         plan_root->planPool().add<aris::plan::Clear>();
-        plan_root->planPool().add<aris::server::GetInfo>();
+//        plan_root->planPool().add<aris::server::GetInfo>();
         //kaanh库提供指令集
         plan_root->planPool().add<kaanh::Home>();
         plan_root->planPool().add<kaanh::Sleep>();

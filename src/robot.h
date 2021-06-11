@@ -9,7 +9,7 @@ namespace robot
     //其他参数和函数声明
     using Size = std::size_t;
     constexpr double PI = 3.141592653589793;
-    class MoveS :public aris::plan::Plan
+    class MoveS :public aris::core::CloneObject<MoveS, aris::plan::Plan>
     {
     public:
         auto virtual prepareNrt()->void;
@@ -59,12 +59,15 @@ namespace robot
         auto virtual prepareNrt()->void override;
         auto virtual executeRT()->int override;
 
-        virtual ~Serial();
+        virtual ~Serial() override;
         explicit Serial(const std::string &name = "sucker_ctrl");
   //      ARIS_REGISTER_TYPE(Serial);
 
 //        char motor{"Off"};
 //        char airSwitch{"Off"};
+     private:
+        struct Imp;
+        aris::core::ImpPtr<Imp> imp_;
     };
 
     auto createPlanRoot()->std::unique_ptr<aris::plan::PlanRoot>;
