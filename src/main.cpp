@@ -10,8 +10,8 @@
 #include"plan.h"
 
 using namespace aris::dynamic;
-auto xmlpath = std::filesystem::absolute(".");	//获取当前工程所在的路径
-auto logpath = std::filesystem::absolute(".");	//获取当前工程所在的路径
+auto static xmlpath = std::filesystem::absolute(".");	//获取当前工程所在的路径
+auto static logpath = std::filesystem::absolute(".");	//获取当前工程所在的路径
 const std::string xmlfile = "kaanh.xml";		//控制配置文件名称
 const std::string logfolder = "log";			//log文件夹名称
 
@@ -30,14 +30,13 @@ int main(int argc, char *argv[])
     //cs.saveXmlFile(xmlpath.string().c_str());	//save kaanh.xml配置
     cs.init();									//初始化
     aris::core::logDirectory(logpath);			//设置log路径
-
-    std::cout << aris::core::toXmlString(cs) << std::endl;
+    std::cout << aris::core::toXmlString(cs) << std::endl; //print the control server state
 
 
     auto &cal = cs.model().calculator();		//UI变量求解器
     kaanhconfig::createUserDataType(cal, 6);		//预定义UI界面变量集
 //    kaanhconfig::createPauseTimeSpeed();		//初始化UI停止暂停功能参数
-    //cs.start();
+    //cs.start();   // 不注释，则程序运行时开启控制器服务
 
     //实时回调函数，每个实时周期调用一次//
     cs.setRtPlanPostCallback(kaanh::update_state);
@@ -50,6 +49,8 @@ int main(int argc, char *argv[])
 		dynamic_cast<aris::control::EthercatMotor&>(m).setVirtual(true);
 	}
 #endif
+
+
     cs.interfacePool().add<aris::server::ProgramWebInterface>("", "1001", aris::core::Socket::WEB);
     //开启WebSocket/socket服务器//
     cs.open();

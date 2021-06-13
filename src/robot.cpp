@@ -32,6 +32,8 @@ namespace robot {
 //2、然后执行executeRT,executeRT每一个循环周期(默认1ms)会被实时核调用一次，执行的总时间由用户给定
 //3、执行结束后，本指令会被析构
 //指令功能：某一电机或者所有电机1-cos(theta)轨迹运行，幅值为pos，周期为time，周期数为timenum
+
+/*-----------MoveS------------*/
     struct MoveSParam {
         double pos;
         double time;
@@ -45,14 +47,14 @@ namespace robot {
         //初始化这个结构体中的每个成员
         MoveSParam param;
         param.active_motor.clear();
-        param.active_motor.resize(controller()->motionPool().size(),
-                                  false);  //开辟一段空间，有motionPool().size()这么大，每个元素用false进行填充
+        param.active_motor.resize(controller()->motionPool().size(), false);  //开辟一段空间，有motionPool().size()这么大，每个元素用false进行填充
         param.begin_pjs.resize(controller()->motionPool().size(), 0.0);
         param.step_pjs.resize(controller()->motionPool().size(), 0.0);
         param.pos = 0.0;
         param.time = 0.0;
         param.timenum = 0;
-// 根据发送的指令，填充结构体里面对应成员的值
+
+        // 根据发送的指令，填充结构体里面对应成员的值
         //解析指令参数
         for (auto &p : cmdParams()) {
             if (p.first == "all") {
@@ -94,13 +96,12 @@ namespace robot {
                     param.begin_pjs[i] = controller()->motionPool()[i].targetPos();
                 }
             }
-
         }
 
         k = param.pos / (2 * accelerationtime * (time - accelerationtime));
 
         //1-cos(theta)轨迹运行
-        for (Size i = 0; i < param.active_motor.size(); ++i) {
+        for (std::size_t i = 0; i < param.active_motor.size(); ++i) {
             if (param.active_motor[i]) {
                 if (time / 2 < accelerationtime) {
                     param.step_pjs[i] =
@@ -133,7 +134,7 @@ namespace robot {
         //打印
         auto &cout = controller()->mout();
         if (count() % 100 == 0) {
-            for (int i = 0; i < param.active_motor.size(); i++) {
+            for (std::size_t i = 0; i < param.active_motor.size(); i++) {
                 cout << std::setprecision(10) << "targetpos:" << param.step_pjs[i] << "  ";
                 cout << std::setprecision(10) << "actualpos:" << controller()->motionPool()[i].actualPos() << "  ";
             }
@@ -143,7 +144,7 @@ namespace robot {
 
         //记录
         auto &lout = controller()->lout();
-        for (int i = 0; i < param.active_motor.size(); i++) {
+        for (std::size_t i = 0; i < param.active_motor.size(); i++) {
             lout << controller()->motionPool()[i].targetPos() << "  ";
             lout << controller()->motionPool()[i].actualPos() << "  ";
         }
@@ -193,7 +194,7 @@ namespace robot {
         // get begin pe //
         if (count() == 1) {
             // get position from controller //
-            for (int i = 0; i < model()->motionPool().size(); ++i) {
+            for (std::size_t i = 0; i < model()->motionPool().size(); ++i) {
                 model()->motionPool()[i].setMp(controller()->motionPool()[i].targetPos());
             }
 
@@ -246,7 +247,7 @@ namespace robot {
 
         // get input //
 //    double input[6];
-        for (int i = 0; i < model()->motionPool().size(); ++i) {
+        for (std::size_t i = 0; i < model()->motionPool().size(); ++i) {
             model()->motionPool()[i].updMp();
             controller()->motionPool()[i].setTargetPos(model()->motionPool()[i].mp());
         }
@@ -271,15 +272,15 @@ namespace robot {
                 "</Command>");
     }
 
-
+/*-----------Move Joint------------*/
 // 导纳控制 //
-    std::atomic_int x = 0;
-    std::atomic_int y = 0;
-    std::atomic_int z = 0;
-    std::atomic_int rx = 0;
-    std::atomic_int ry = 0;
-    std::atomic_int rz = 0;
-    std::atomic_bool enable_mvJoint = true;
+    static std::atomic_int x = 0;
+    static std::atomic_int y = 0;
+    static std::atomic_int z = 0;
+    static std::atomic_int rx = 0;
+    static std::atomic_int ry = 0;
+    static std::atomic_int rz = 0;
+    static std::atomic_bool enable_mvJoint = true;
     struct MoveJointParam {
         aris::dynamic::Marker *tool, *wobj;
         float realdata_init[6], realdata[6];
@@ -307,11 +308,6 @@ namespace robot {
         std::cout << "prepare begin" << std::endl;
 
         enable_mvJoint.store(true);
-//        imp_->tool = &*model()->generalMotionPool()[0].makI().fatherPart().markerPool().findByName(
-//                std::string(cmdParams().at("tool")));
-//        imp_->wobj = &*model()->generalMotionPool()[0].makJ().fatherPart().markerPool().findByName(
-//                std::string(cmdParams().at("wobj")));
-
         imp_->tool = &*model()->generalMotionPool()[0].makI()->fatherPart().findMarker(cmdParams().at("tool"));
         imp_->tool = &*model()->generalMotionPool()[0].makJ()->fatherPart().findMarker(cmdParams().at("wobj"));
 
@@ -342,8 +338,9 @@ namespace robot {
             }
         }
 
-        for (auto &option : motorOptions()) option |= aris::plan::Plan::NOT_CHECK_POS_CONTINUOUS_SECOND_ORDER |
-                                                      NOT_CHECK_VEL_CONTINUOUS;
+        for (auto &option : motorOptions()){
+            option |= aris::plan::Plan::NOT_CHECK_POS_CONTINUOUS_SECOND_ORDER |NOT_CHECK_VEL_CONTINUOUS;
+        }
         std::vector <std::pair<std::string, std::any>> ret_value;
         ret() = ret_value;
         std::cout << "prepare finished" << std::endl;
@@ -367,7 +364,8 @@ namespace robot {
         static double p_next[6], v_now[6], v_tcp[6]{0.0, 0.0, 0.0, 0.0, 0.0, 0.0}, v_joint[6];
         static double s_next[6], v_tmp[6], s_now[6], s_tcp[6]{0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
         static float realdata[6];
-
+        static double p_now[6];
+        static double a_joint[6]{0.0 ,0.0, 0.0, 0.0, 0.0, 0.0};
         // use lambda function to realize sub-function //
         auto get_force_data = [&](float *data) {
             //auto slave7 = dynamic_cast<aris::control::EthercatSlave &>(controller()->slavePool().at(FS_NUM));
@@ -380,7 +378,6 @@ namespace robot {
         if (count() == 1) {
             //设置log文件名称//
             controller()->logFileRawName("motion_replay");
-
             //获取力传感器相对tcp的旋转矩阵//
             imp_->theta = (-imp_->theta_setup) * PI / 180;
             double pq_setup[7]{0.0, 0.0, imp_->pos_setup, 0.0, 0.0, sin(imp_->theta / 2.0), cos(imp_->theta / 2.0)};
@@ -404,7 +401,7 @@ namespace robot {
         s_pm_dot_pm(pm_begin, imp_->fs2tpm, imp_->t2bpm);
         s_mm(3, 1, 3, imp_->t2bpm, aris::dynamic::RowMajor{4}, xyz_temp, 1, imp_->force_target, 1);
         s_mm(3, 1, 3, imp_->t2bpm, aris::dynamic::RowMajor{4}, abc_temp, 1, imp_->force_target + 3, 1);
-
+        
         if (count() % 500 == 0) {
             for (int i = 0; i < 6; i++) {
                 std::cout << "f:" << imp_->force_target[i] << " ";
@@ -422,72 +419,105 @@ namespace robot {
             * 如果没有接触就以指定速度下降，如果产生接触则执行阻抗控制命令；
             */
 
-            if (count()== 1 | flag == 0) {
-                flag=0;
-                //求阻尼力
-                model()->generalMotionPool()[0].getMve(v_now, eu_type);
-                model()->generalMotionPool()[0].getMve(v_tcp, eu_type);
-
-                // 读力
-                imp_->a1 = (imp_->force_target[2] - imp_->force_aim - imp_->damping[2] * v_tcp[2] -
-                            imp_->K[2] * s_tcp[2]) / 0.4;
-                v_tmp[2] = v_tcp[2];
-                v_tcp[2] += ((imp_->a1 + imp_->a0) * 1e-3) / 2;
-                imp_->a1 = imp_->a0;
-                // 计算阻抗控制笛卡尔空间下的目标相对位移s
-                // s_tcp[2]指末端z轴方向上的总相对位移
-                s_tcp[2] += ((v_tmp[2] + v_tcp[2]) * 1e-3) / 2;
-
-                // 打印并查验计算得出的目标速度与目标位移
-                if (count() % 50 == 0) {
-                    std::cout << "V:" << v_tcp[2] << std::endl;
-                    std::cout << "S:" << s_tcp[2] << std::endl;
-                    std::cout << "fce tar:" << imp_->force_target[2] << std::endl;
+            //get the velocity of tool center
+            model()->generalMotionPool().at(0).getMve(v_tcp,eu_type);
+            //get the position of tool center
+            model()->generalMotionPool().at(0).getMpe(s_tcp,eu_type);
+            //calculate the desired acceleration
+            double a = (imp_->force_target[2] - imp_->force_aim - imp_->damping[2]* v_tcp[2] - imp_->K[2] * (s_tcp[2] - ???))/imp_->M;
+            double next_tcp_a[6] = {0,a,0,0,0,0};
+            //inverse kinematic to calculate the acceleration of every motor
+                //get the jacobian first
+                // 获取雅可比矩阵，并对过奇异点的雅可比矩阵进行特殊处理
+            double pinv[36];
+            {
+                auto &fwd = dynamic_cast<aris::dynamic::ForwardKinematicSolver&>(model()->solverPool()[1]);
+                fwd.cptJacobiWrtEE();
+                    //QR分解求方程的解
+                double U[36], tau[6], tau2[6];
+                aris::Size p[6];
+                Size rank;
+                    //auto inline s_householder_utp(Size m, Size n, const double *A, AType a_t, double *U, UType u_t, double *tau, TauType tau_t, Size *p, Size &rank, double zero_check = 1e-10)noexcept->void
+                    //A为输入,根据QR分解的结果求广义逆，相当于Matlab中的 pinv(A) //
+                s_householder_utp(6, 6, fwd.Jf(), U, tau, p, rank, 1e-3);
+                    //对奇异点进行特殊处理,对U进行处理
+                if (rank < 6)
+                {
+                    for (int i = 0; i < 6; i++)
+                    {
+                        if (U[7 * i] >= 0)
+                        {
+                            U[7 * i] = U[7 * i] + 0.1;
+                        }
+                        else
+                        {
+                            U[7 * i] = U[7 * i] - 0.1;
+                        }
+                    }
                 }
+                    // 根据QR分解的结果求广义逆，相当于Matlab中的 pinv(A) //
+                s_householder_utp2pinv(6, 6, rank, U, tau, p, pinv, tau2, 1e-10);
+            }
+                //calculate the desired accelaration of every motor
+            s_mm(6,1,6,pinv,next_tcp_a,a_joint);
+            if(count() %50 == 0){
+                std::cout<<"force detected"<<std::endl;
+                std::cout<<"v_now = "<<v_now[2]<<std::endl;
+                std::cout<<"p_now = "<<s_tcp[2]<<std::endl;
+                std::cout<<"a_desired = "<<a<<std::endl;
+            }
+            //move the joint
+            for(std::size_t i = 0; i<controller()->motionPool().size(); ++i){
+                controller()->motionPool()[i].setTargetToq()
             }
 
-            // 获取并设置当前关节空间
-            for (int i = 0; i < model()->motionPool().size(); ++i) {
-                model()->motionPool()[i].setMp(controller()->motionPool()[i].targetPos());
-            }
-
-            // 根据模型与当前关节空间计算笛卡尔坐标系下的坐标
-            // forward kinematic //
-            model()->solverPool()[1].kinPos();
-
-            // 更新末端位置的位置坐标
-            // update ee //
-            ee.updMpm();
-            // ee.updMpm与getMpe的区别是什么？ee的物理意义是什么？
-            // get ee pe
-            // 获取当前欧拉角位姿并赋值到begin_pe，方便操作
-            ee.getMpe(begin_pe);
 
 
-            // 初始化新的笛卡尔坐标pe（初始赋值为begin_pe）
-            std::copy(begin_pe, begin_pe + 6, pe);
-            double step = s_tcp[2];
-            mout() << "s_tcp[2]:" << s_tcp[2] << std::endl;
+//            if (count()== 1 | flag == 0) {
+//                flag=0;
+//                //求阻尼力
+//                model()->generalMotionPool()[0].getMve(v_now, eu_type);
+//                model()->generalMotionPool()[0].getMve(v_tcp, eu_type);
+                
+//                // 读力
+//                imp_->a1 = (imp_->force_target[2] - imp_->force_aim - imp_->damping[2] * v_tcp[2] -
+//                            imp_->K[2] * s_tcp[2]) / 0.4;
+//                v_tmp[2] = v_tcp[2];
+//                v_tcp[2] += ((imp_->a1 + imp_->a0) * 1e-3) / 2;
+//                imp_->a1 = imp_->a0;
+//                // 计算阻抗控制笛卡尔空间下的目标相对位移s
+//                // s_tcp[2]指末端z轴方向上的总相对位移
+//                s_tcp[2] += ((v_tmp[2] + v_tcp[2]) * 1e-3) / 2;
 
-            // Plan Real Time Trajectory
-            Curve curve;
+//                // 打印并查验计算得出的目标速度与目标位移
+//                if (count() % 50 == 0) {
+//                    std::cout << "V:" << v_tcp[2] << std::endl;
+//                    std::cout << "S:" << s_tcp[2] << std::endl;
+//                    std::cout << "fce tar:" << imp_->force_target[2] << std::endl;
+//                }
+//            }
 
-            /* 给pe加上规划好的小位移 */
-            imp_->ss = curve.getCurve(count()) - imp_->s_temp;
-            mout() << "getcurve:" << curve.getCurve(count()) << std::endl;
-            mout() << " imp_->s_temp:" <<  imp_->s_temp << std::endl;
-            pe[2] -= step * imp_->ss;
-            imp_->s_temp = curve.getCurve(count());
+//            // 获取并设置当前关节空间
+//            for (std::size_t i = 0; i < model()->motionPool().size(); ++i) {
+//                model()->motionPool()[i].setMp(controller()->motionPool()[i].targetPos());
+//            }
 
-            mout() << "pe[2]" << pe[2] << std::endl;
-            mout() << "s_tcp[2]]" << s_tcp[2] << std::endl;
+//            // 根据模型与当前关节空间计算笛卡尔坐标系下的坐标
+//            // forward kinematic //
+//            model()->solverPool()[1].kinPos();
 
-            if (count() % 500 == 0 & s_tcp[2] >= 0.001) {
-                mout() << "pe[2]" << pe[2] << std::endl;
-                mout() << "s_tcp[2]]" << s_tcp[2] << std::endl;
-                return 0;
-            }
+//            // 更新末端位置的位置坐标
+//            // update ee //
+//            ee.updMpm();
+//            // 获取当前欧拉角位姿并赋值到begin_pe，方便操作
+//            ee.getMpe(begin_pe);
 
+
+//            // 初始化新的笛卡尔坐标pe（初始赋值为begin_pe）
+//            std::copy(begin_pe, begin_pe + 6, pe);
+//            double step = s_tcp[2];
+//            mout() << "s_tcp[2]:" << s_tcp[2] << std::endl;
+//--------------------------------------------------
 
 //            // get position from controller //
 //            for(int i=0;i<model()->motionPool().size();++i)
@@ -507,13 +537,13 @@ namespace robot {
 //            }
 
 
-            {
+//            {
 //            imp_->a1 = (imp_->force_target[2]-imp_->force_aim-imp_->damping[2] * v_tcp[2])/0.4;
 //            v_tcp[2] += ((imp_->a1+imp_->a0)*1e-3)/2;
 //            imp_->a1 = imp_->a0;
-            }
+//            }
         } else {
-            for (int i = 0; i < model()->motionPool().size(); ++i) {
+            for (std::size_t i = 0; i < model()->motionPool().size(); ++i) {
                 model()->motionPool()[i].setMp(controller()->motionPool()[i].targetPos());
             }
 
@@ -537,9 +567,22 @@ namespace robot {
             imp_->s_temp = curve.getCurve(count());
             mout() << "3" << pe[2] << std::endl;
 
+            // 给ee设置新的笛卡尔坐标pe
+            // inverse kinematic //
+            ee.setMpe(pe);
+
+            // 进行反解，计算关节空间
+            model()->solverPool()[0].kinPos();
+            mout() << "4" << pe[2] << std::endl;
+            // 执行
+            for(std::size_t i = 0; i <model()->motionPool().size(); ++i){
+                model()->motionPool()[i].updMp();
+                controller()->motionPool()[i].setTargetPos(model()->motionPool()[i].mp());
+            }
+
         }
 
-        {
+
 //            // 根据力传感器受力和阻尼力计算v_tcp //
 //            for (int i = 0; i < 6; i++)
 //            {
@@ -549,21 +592,6 @@ namespace robot {
 //                }
 //                v_tcp[i] = std::min(std::max(v_tcp[i], -imp_->vel_limit[i]), imp_->vel_limit[i]);
 //            }
-        }
-
-        // 给ee设置新的笛卡尔坐标pe
-        // inverse kinematic //
-        ee.setMpe(pe);
-
-        // 进行反解，计算关节空间
-        model()->solverPool()[0].kinPos();
-        mout() << "4" << pe[2] << std::endl;
-
-        // 执行
-        for (int i = 0; i < model()->motionPool().size(); ++i) {
-//            model()->motionPool()[i].updMp();
-//            controller()->motionPool()[i].setTargetPos(model()->motionPool()[i].mp());
-        }
 
         // 获取雅可比矩阵，并对过奇异点的雅可比矩阵进行特殊处理
 //    double pinv[36];
@@ -677,7 +705,7 @@ namespace robot {
 
 
         //aris库提供指令集
-        plan_root->planPool().add<aris::plan::Enable>();
+        plan_root->planPool().add<aris::plan::Enable>();//
         plan_root->planPool().add<aris::plan::Disable>();
         plan_root->planPool().add<aris::plan::Start>();
         plan_root->planPool().add<aris::plan::Stop>();
