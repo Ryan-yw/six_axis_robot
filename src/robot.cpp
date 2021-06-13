@@ -283,7 +283,7 @@ namespace robot {
     static std::atomic_bool enable_mvJoint = true;
     struct MoveJointParam {
         aris::dynamic::Marker *tool, *wobj;
-        float realdata_init[6], realdata[6];
+        float realdata_init[6], realdata[6];//the initial force data, and the force data of eacch cycle
         double theta;
         double vel_limit[6], k[6], damping[6], K[6], force_delete[6];
         double fs2tpm[16], t2bpm[16];
@@ -291,12 +291,19 @@ namespace robot {
         double force_damp[6]{0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
         double theta_setup = -90;//力传感器安装位置相对tcp偏移角
         double pos_setup = 0.061;//力传感器安装位置相对tcp偏移距离
-        double threshold = 1e-6, a1, a0, M = 1, B = 1, KK = 10, force_aim = -1;
+        double threshold = 1e-6, a1, a0, KK = 10, force_aim = -1;
+        double B = 1;// the damping constance of robot
+        double M = 1;// the mass of robot
         double pm_begin[16];
         double pm_real[16];
         double R01[16];
         double target_displacement = 0;
         double s_temp = 0, ss = 0;
+        double ke = 220000;// the spring constance of the environment surface
+        double x_r;// the reference position of trajactory, calculated
+        double x_e;// the environment position, known
+        double loop_period = 1e-3;// the period of every loop
+        bool contacted = false;
 //    const double M=1,B=1,KK=10,force_aim=-1;
 //    double a1, a0;
 
@@ -310,6 +317,8 @@ namespace robot {
         enable_mvJoint.store(true);
         imp_->tool = &*model()->generalMotionPool()[0].makI()->fatherPart().findMarker(cmdParams().at("tool"));
         imp_->tool = &*model()->generalMotionPool()[0].makJ()->fatherPart().findMarker(cmdParams().at("wobj"));
+
+        imp_->x_e = 0;
 
         for (auto cmd_param : cmdParams()) {
             if (cmd_param.first == "vellimit") {
@@ -418,14 +427,21 @@ namespace robot {
             * else表示还没接触的时候；
             * 如果没有接触就以指定速度下降，如果产生接触则执行阻抗控制命令；
             */
-
             //get the velocity of tool center
             model()->generalMotionPool().at(0).getMve(v_tcp,eu_type);
             //get the position of tool center
             model()->generalMotionPool().at(0).getMpe(s_tcp,eu_type);
-            //calculate the desired acceleration
-            double a = (imp_->force_target[2] - imp_->force_aim - imp_->damping[2]* v_tcp[2] - imp_->K[2] * (s_tcp[2] - ???))/imp_->M;
-            double next_tcp_a[6] = {0,a,0,0,0,0};
+            //get the x_environment as soon as contact happens
+            if(!imp_->contacted){
+                imp_->contacted = true;
+                imp_->x_e = s_tcp[2];
+            }
+            //get the x_reference of
+            imp_->x_r = imp_->x_e - (imp_->force_aim / imp_->ke);
+            //calculate the desired acceleration and velocity
+            double a = (imp_->force_target[2] - imp_->force_aim - imp_->damping[2]* v_tcp[2] - imp_->K[2] * (s_tcp[2] - imp_->x_r))/imp_->M;
+            double v = v_tcp[2] + a * imp_-> loop_period;
+            double next_tcp_v[6] = {0,0,v,0,0,0};
             //inverse kinematic to calculate the acceleration of every motor
                 //get the jacobian first
                 // 获取雅可比矩阵，并对过奇异点的雅可比矩阵进行特殊处理
@@ -459,16 +475,16 @@ namespace robot {
                 s_householder_utp2pinv(6, 6, rank, U, tau, p, pinv, tau2, 1e-10);
             }
                 //calculate the desired accelaration of every motor
-            s_mm(6,1,6,pinv,next_tcp_a,a_joint);
+            s_mm(6,1,6,pinv,next_tcp_v,v_joint);
             if(count() %50 == 0){
                 std::cout<<"force detected"<<std::endl;
                 std::cout<<"v_now = "<<v_now[2]<<std::endl;
                 std::cout<<"p_now = "<<s_tcp[2]<<std::endl;
-                std::cout<<"a_desired = "<<a<<std::endl;
+                std::cout<<"v_desired = "<<v<<std::endl;
             }
             //move the joint
             for(std::size_t i = 0; i<controller()->motionPool().size(); ++i){
-                controller()->motionPool()[i].setTargetToq()
+                controller()->motionPool()[i].setTargetVel(v_joint[i]);
             }
 
 
