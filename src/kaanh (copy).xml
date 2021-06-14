@@ -1,4 +1,12 @@
 <ControlServer>
+    <InterfacePoolObject name="object_pool">
+        <ProgramWebInterface>
+            <Socket name="socket" connect_type="WEB" port="5866"/>
+        </ProgramWebInterface>
+        <WebInterface>
+            <Socket name="socket" connect_type="TCP" port="5867"/>
+        </WebInterface>
+    </InterfacePoolObject>
     <InterfaceRoot/>
     <EthercatController name="ethercat_controller" sample_period_ns="1000000" esi_dirs="">
         <SlavePoolObject name="slave_pool">
@@ -152,6 +160,53 @@
                     </SyncManager>
                 </SyncManagerPoolObject>
             </EthercatMotor>
+            <EthercatSlave phy_id="6" vendor_id="0x000fffff" product_code="0x000c7011" revision_num="0x00000001" dc_assign_activate="0x00000000" sync0_shift_ns="650000">
+                <SyncManagerPoolObject>
+                    <SyncManager is_tx="false"/>
+                    <SyncManager is_tx="true"/>
+                    <SyncManager is_tx="false">
+                        <Pdo index="0x1601">
+                            <PdoEntry name="entry" index="0x7010" subindex="0x01" size="1"/>
+                            <PdoEntry name="entry" index="0x7010" subindex="0x02" size="1"/>
+                            <PdoEntry name="entry" index="0x7010" subindex="0x03" size="1"/>
+                            <PdoEntry name="entry" index="0x7010" subindex="0x04" size="1"/>
+                            <PdoEntry name="entry" index="0x7010" subindex="0x05" size="1"/>
+                            <PdoEntry name="entry" index="0x7010" subindex="0x06" size="1"/>
+                            <PdoEntry name="entry" index="0x7010" subindex="0x07" size="1"/>
+                            <PdoEntry name="entry" index="0x7010" subindex="0x08" size="1"/>
+                            <PdoEntry name="entry" index="0x0000" subindex="0x00" size="8"/>
+                        </Pdo>
+                    </SyncManager>
+                    <SyncManager is_tx="true">
+                        <Pdo index="0x1a00">
+                            <PdoEntry name="entry" index="0x6000" subindex="0x01" size="1"/>
+                            <PdoEntry name="entry" index="0x6000" subindex="0x02" size="1"/>
+                            <PdoEntry name="entry" index="0x6000" subindex="0x03" size="1"/>
+                            <PdoEntry name="entry" index="0x6000" subindex="0x04" size="1"/>
+                            <PdoEntry name="entry" index="0x6000" subindex="0x05" size="1"/>
+                            <PdoEntry name="entry" index="0x6000" subindex="0x06" size="1"/>
+                            <PdoEntry name="entry" index="0x6000" subindex="0x07" size="1"/>
+                            <PdoEntry name="entry" index="0x6000" subindex="0x08" size="1"/>
+                            <PdoEntry name="entry" index="0x0000" subindex="0x00" size="8"/>
+                        </Pdo>
+                        <Pdo index="0x1a02">
+                            <PdoEntry name="entry" index="0x6020" subindex="0x01" size="1"/>
+                            <PdoEntry name="entry" index="0x6020" subindex="0x02" size="1"/>
+                            <PdoEntry name="entry" index="0x6020" subindex="0x03" size="2"/>
+                            <PdoEntry name="entry" index="0x6020" subindex="0x05" size="2"/>
+                            <PdoEntry name="entry" index="0x0000" subindex="0x00" size="8"/>
+                            <PdoEntry name="entry" index="0x1802" subindex="0x07" size="1"/>
+                            <PdoEntry name="entry" index="0x1802" subindex="0x09" size="1"/>
+                            <PdoEntry name="entry" index="0x6020" subindex="0x0b" size="32"/>
+                            <PdoEntry name="entry" index="0x6020" subindex="0x0c" size="32"/>
+                            <PdoEntry name="entry" index="0x6020" subindex="0x0d" size="32"/>
+                            <PdoEntry name="entry" index="0x6020" subindex="0x0e" size="32"/>
+                            <PdoEntry name="entry" index="0x6020" subindex="0x0f" size="32"/>
+                            <PdoEntry name="entry" index="0x6020" subindex="0x10" size="32"/>
+                        </Pdo>
+                    </SyncManager>
+                </SyncManagerPoolObject>
+            </EthercatSlave>
         </SlavePoolObject>
         <Pipe name="mout_pipe"/>
         <Pipe name="lout_pipe"/>
@@ -711,6 +766,9 @@
                     </GroupParam>
                 </Command>
             </kaanh.Reset>
+            <GetInfo name="plan">
+                <Command name="get_i"/>
+            </GetInfo>
             <kaanh.MoveAbsJ name="MoveAbsJ">
                 <Command name="mvaj">
                     <GroupParam>
@@ -1664,5 +1722,4 @@
             </SwitchTool>
         </PlanPoolObject>
     </PlanRoot>
-    <ProgramMiddleware/>
 </ControlServer>

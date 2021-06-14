@@ -21,7 +21,7 @@ namespace robot
   //      ARIS_REGISTER_TYPE(MoveS);
     };
 
-    class MoveJoint : public aris::plan::Plan
+    class MoveJoint : public aris::core::CloneObject<MoveJoint, aris::plan::Plan>
     {
     public:
         auto virtual prepareNrt()->void;

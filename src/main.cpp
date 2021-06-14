@@ -6,7 +6,6 @@
 #include<string>
 #include<filesystem>
 #include "robot.h"
-
 #include"plan.h"
 
 using namespace aris::dynamic;
@@ -14,7 +13,6 @@ auto static xmlpath = std::filesystem::absolute(".");	//获取当前工程所在
 auto static logpath = std::filesystem::absolute(".");	//获取当前工程所在的路径
 const std::string xmlfile = "kaanh.xml";		//控制配置文件名称
 const std::string logfolder = "log";			//log文件夹名称
-
 
 int main(int argc, char *argv[])
 {
@@ -24,14 +22,22 @@ int main(int argc, char *argv[])
 
     auto&cs = aris::server::ControlServer::instance();
 
-    //cs.loadXmlFile(xmlpath.string().c_str());
-    aris::core::fromXmlFile(cs, xmlpath);//加载kaanh.xml配置
-    cs.resetPlanRoot(robot::createPlanRoot().release());//加载cmd配置
-    //cs.saveXmlFile(xmlpath.string().c_str());	//save kaanh.xml配置
-    cs.init();									//初始化
-    aris::core::logDirectory(logpath);			//设置log路径
-    std::cout << aris::core::toXmlString(cs) << std::endl; //print the control server state
+    aris::control::EthercatController ec;
+    ec.scan();
+    std::cout<<aris::core::toXmlString(ec) << std::endl;
 
+    aris::core::fromXmlFile(cs, xmlpath);//加载kaanh.xml配置
+
+    cs.resetPlanRoot(robot::createPlanRoot().release());//加载cmd配置
+
+    cs.init();									//初始化
+    auto &roberr = kaanh::RobotError::get_instance();
+    roberr.InitErrorConfig();
+    aris::core::logDirectory(logpath);			//设置log路径
+//    std::cout << aris::core::toXmlString(cs) << std::endl; //print the control server state
+
+    std::array<double, 6>f = {400,400,400,16,16,16};
+    FS_LIMITED.store(f);
 
     auto &cal = cs.model().calculator();		//UI变量求解器
     kaanhconfig::createUserDataType(cal, 6);		//预定义UI界面变量集
@@ -51,7 +57,7 @@ int main(int argc, char *argv[])
 #endif
 
 
-    cs.interfacePool().add<aris::server::ProgramWebInterface>("", "1001", aris::core::Socket::WEB);
+   // cs.interfacePool().add<aris::server::ProgramWebInterface>("", "1001", aris::core::Socket::WEB);
     //开启WebSocket/socket服务器//
     cs.open();
 

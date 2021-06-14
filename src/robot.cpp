@@ -356,6 +356,7 @@ namespace robot {
     }
 
     auto MoveJoint::executeRT() -> int {
+        std::cout<<"executeRT";
         const int FS_NUM = 6;
 
         static double begin_pe[6];
@@ -484,7 +485,7 @@ namespace robot {
             }
             //move the joint
             for(std::size_t i = 0; i<controller()->motionPool().size(); ++i){
-                controller()->motionPool()[i].setTargetVel(v_joint[i]);
+                //controller()->motionPool()[i].setTargetVel(v_joint[i]);
             }
 
 
@@ -592,11 +593,13 @@ namespace robot {
             mout() << "4" << pe[2] << std::endl;
             // 执行
             for(std::size_t i = 0; i <model()->motionPool().size(); ++i){
-                model()->motionPool()[i].updMp();
-                controller()->motionPool()[i].setTargetPos(model()->motionPool()[i].mp());
+                //model()->motionPool()[i].updMp();
+                //controller()->motionPool()[i].setTargetPos(model()->motionPool()[i].mp());
             }
 
+
         }
+        std::cout<<imp_->realdata;
 
 
 //            // 根据力传感器受力和阻尼力计算v_tcp //
@@ -660,7 +663,10 @@ namespace robot {
 //    }
 
         // 运动学正解 //
-        if (model()->solverPool().at(1).kinPos())return -1;
+        if (model()->solverPool().at(1).kinPos()){
+            std::cout<<"forward kinematic failed";
+            return -1;
+        }
 
         static aris::Size total_count = 1;
         if (enable_mvJoint.load()) {
@@ -683,8 +689,7 @@ namespace robot {
 
     MoveJoint &MoveJoint::operator=(MoveJoint &&other) = default;
 
-    MoveJoint::MoveJoint(const std::string &name) : Plan(name), imp_(new Imp) {
-        //command().loadXmlStr(
+    MoveJoint::MoveJoint(const std::string &name){
         aris::core::fromXmlString(command(),
                 "<Command name=\"movejoint\">"
                 "	<GroupParam>"
@@ -702,21 +707,21 @@ namespace robot {
 
 //------------------------//
 
-    ARIS_REGISTRATION
-            {
-                aris::core::class_<MoveS>("MoveS")
-                        .inherit<Plan>();
+//    ARIS_REGISTRATION
+//            {
+//                aris::core::class_<MoveS>("MoveS")
+//                        .inherit<Plan>();
 
-                aris::core::class_<MoveTest>("MoveTest")
-                        .inherit<Plan>();
+//                aris::core::class_<MoveTest>("MoveTest")
+//                        .inherit<Plan>();
 
 
-            }
+//            }
     auto createPlanRoot() -> std::unique_ptr <aris::plan::PlanRoot> {
         std::unique_ptr <aris::plan::PlanRoot> plan_root(new aris::plan::PlanRoot);
         //用户自己开发指令集
-        plan_root->planPool().add<robot::MoveS>();
-        plan_root->planPool().add<robot::MoveTest>();
+//        plan_root->planPool().add<robot::MoveS>();
+//        plan_root->planPool().add<robot::MoveTest>();
         plan_root->planPool().add<robot::MoveJoint>();
 
 

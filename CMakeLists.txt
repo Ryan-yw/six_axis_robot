@@ -28,7 +28,7 @@ include_directories(${kaanh_INCLUDE_DIRS})
 message(${aris_DIR} ${kaanh_DIR})
 add_executable(sixaxisrobot src/main.cpp src/robot.cpp src/robot.h src/plan.cpp src/plan.h src/planRT.cpp src/planRT.h)
 
-file(COPY src/kaanh.xml DESTINATION ./)
+#file(COPY src/kaanh.xml DESTINATION ./)
 
 if(UNIX)
     target_link_libraries(sixaxisrobot ${kaanh_LIBRARIES} ${aris_LIBRARIES} atomic)
