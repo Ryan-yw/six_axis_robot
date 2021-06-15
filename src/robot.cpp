@@ -249,7 +249,7 @@ namespace robot {
 //    double input[6];
         for (std::size_t i = 0; i < model()->motionPool().size(); ++i) {
             model()->motionPool()[i].updMp();
-            controller()->motionPool()[i].setTargetPos(model()->motionPool()[i].mp());
+            //controller()->motionPool()[i].setTargetPos(model()->motionPool()[i].mp());
         }
 
         // print //
@@ -316,7 +316,7 @@ namespace robot {
 
         enable_mvJoint.store(true);
         imp_->tool = &*model()->generalMotionPool()[0].makI()->fatherPart().findMarker(cmdParams().at("tool"));
-        imp_->tool = &*model()->generalMotionPool()[0].makJ()->fatherPart().findMarker(cmdParams().at("wobj"));
+        imp_->wobj = &*model()->generalMotionPool()[0].makJ()->fatherPart().findMarker(cmdParams().at("wobj"));
 
         imp_->x_e = 0;
 
@@ -356,7 +356,7 @@ namespace robot {
     }
 
     auto MoveJoint::executeRT() -> int {
-        std::cout<<"executeRT";
+
         const int FS_NUM = 6;
 
         static double begin_pe[6];
@@ -378,12 +378,11 @@ namespace robot {
         static double a_joint[6]{0.0 ,0.0, 0.0, 0.0, 0.0, 0.0};
         // use lambda function to realize sub-function //
         auto get_force_data = [&](float *data) {
-            //auto slave7 = dynamic_cast<aris::control::EthercatSlave &>(controller()->slavePool().at(FS_NUM));
             for (int i = 0; i < 6; i++) {
-            //    slave7.readPdo(0x6020, i + 11, data + i, 32);
                  this->ecController()->slavePool()[FS_NUM].readPdo(0x6020, i + 11, data + i, 32);
             }
         };
+
 
         if (count() == 1) {
             //设置log文件名称//
@@ -406,13 +405,14 @@ namespace robot {
         double xyz_temp[3]{real_data_double[0], real_data_double[1], real_data_double[2]}, abc_temp[3]{
                 real_data_double[3], real_data_double[4], real_data_double[5]};
         double pm_begin[16];
-        model()->generalMotionPool().at(0).updMpm();
-        imp_->tool->getPm(*imp_->wobj, pm_begin);
+
+       model()->generalMotionPool().at(0).updMpm();
+         imp_->tool->getPm(*imp_->wobj, pm_begin);
         s_pm_dot_pm(pm_begin, imp_->fs2tpm, imp_->t2bpm);
         s_mm(3, 1, 3, imp_->t2bpm, aris::dynamic::RowMajor{4}, xyz_temp, 1, imp_->force_target, 1);
         s_mm(3, 1, 3, imp_->t2bpm, aris::dynamic::RowMajor{4}, abc_temp, 1, imp_->force_target + 3, 1);
         
-        if (count() % 500 == 0) {
+        if (count() % 1000 == 0) {
             for (int i = 0; i < 6; i++) {
                 std::cout << "f:" << imp_->force_target[i] << " ";
             }
@@ -477,15 +477,15 @@ namespace robot {
             }
                 //calculate the desired accelaration of every motor
             s_mm(6,1,6,pinv,next_tcp_v,v_joint);
-            if(count() %50 == 0){
-                std::cout<<"force detected"<<std::endl;
-                std::cout<<"v_now = "<<v_now[2]<<std::endl;
-                std::cout<<"p_now = "<<s_tcp[2]<<std::endl;
-                std::cout<<"v_desired = "<<v<<std::endl;
-            }
+//            if(count() %1000 == 0){
+//                std::cout<<"force detected"<<std::endl;
+//                std::cout<<"v_now = "<<v_now[2]<<std::endl;
+//                std::cout<<"p_now = "<<s_tcp[2]<<std::endl;
+//                std::cout<<"v_desired = "<<v<<std::endl;
+//            }
             //move the joint
             for(std::size_t i = 0; i<controller()->motionPool().size(); ++i){
-                //controller()->motionPool()[i].setTargetVel(v_joint[i]);
+                controller()->motionPool()[i].setTargetVel(v_joint[i]);
             }
 
 
@@ -566,7 +566,7 @@ namespace robot {
 
             // forward kinematic //
             model()->solverPool()[1].kinPos();
-            mout() << "1" << pe[2] << std::endl;
+//            mout() << "1" << pe[2] << std::endl;
             // update ee //
             ee.updMpm();
 
@@ -575,14 +575,17 @@ namespace robot {
 
             std::copy(begin_pe, begin_pe + 6, pe);
             Curve curve;
-            cout << "T" << curve.T_ << std::endl;
+ //           cout << "T" << curve.T_ << std::endl;
             double step = 0.1;
             imp_->ss = curve.getCurve(count()) - imp_->s_temp;
-            mout() << "getcurve:" << curve.getCurve(count()) << std::endl;
-            mout() << " imp_->s_temp:" <<  imp_->s_temp << std::endl;
+
+//            if (count()%1000 == 0){
+//               mout() << "getcurve:" << curve.getCurve(count()) << std::endl;
+//               mout() << " imp_->s_temp:" <<  imp_->s_temp << std::endl;
+//            }
             pe[2] -= step * imp_->ss;
             imp_->s_temp = curve.getCurve(count());
-            mout() << "3" << pe[2] << std::endl;
+//            mout() << "3" << pe[2] << std::endl;
 
             // 给ee设置新的笛卡尔坐标pe
             // inverse kinematic //
@@ -590,16 +593,16 @@ namespace robot {
 
             // 进行反解，计算关节空间
             model()->solverPool()[0].kinPos();
-            mout() << "4" << pe[2] << std::endl;
+//            mout() << "4" << pe[2] << std::endl;
             // 执行
             for(std::size_t i = 0; i <model()->motionPool().size(); ++i){
-                //model()->motionPool()[i].updMp();
-                //controller()->motionPool()[i].setTargetPos(model()->motionPool()[i].mp());
+                model()->motionPool()[i].updMp();
+                controller()->motionPool()[i].setTargetPos(model()->motionPool()[i].mp());
             }
 
 
         }
-        std::cout<<imp_->realdata;
+
 
 
 //            // 根据力传感器受力和阻尼力计算v_tcp //
@@ -720,7 +723,7 @@ namespace robot {
     auto createPlanRoot() -> std::unique_ptr <aris::plan::PlanRoot> {
         std::unique_ptr <aris::plan::PlanRoot> plan_root(new aris::plan::PlanRoot);
         //用户自己开发指令集
-//        plan_root->planPool().add<robot::MoveS>();
+        plan_root->planPool().add<robot::MoveS>();
 //        plan_root->planPool().add<robot::MoveTest>();
         plan_root->planPool().add<robot::MoveJoint>();
 

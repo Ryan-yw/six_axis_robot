@@ -26,8 +26,8 @@ auto Curve::getCurve(int count) -> double {
     }
         double s = 0;
         int t = count - member_count + 1;
-        cout<<"t:"<<t<<endl;
-        std::cout << "member_count: " << member_count <<std::endl;
+      //  cout<<"t:"<<t<<endl;
+       // std::cout << "member_count: " << member_count <<std::endl;
 
         // Now let's generate the target curve!
         if (2 * tr_ < T_){
@@ -40,9 +40,10 @@ auto Curve::getCurve(int count) -> double {
                     } else {
                         s = (2 * a_ * v_ * T_ - 2 * v_ * v_ - a_ * a_ * (t / 1000.0 - T_) * (t / 1000.0 - T_)) / (2 * a_);
                         if (s>=1){flag = 0;
-                        cout<<"flag2"<<flag<<endl;}
+                    //    cout<<"flag2"<<flag<<endl;
+                        }
                     }
-               std::cout << "s: " << s <<std::endl;
+             //  std::cout << "s: " << s <<std::endl;
            }
         else{
 
@@ -53,10 +54,11 @@ auto Curve::getCurve(int count) -> double {
                     } else {
                         s = 0.5 * a_ * tr_ * tr_ + 0.5 * (t / 1000.0 - tr_) * (2 * v_ - a_ * (t / 1000.0 - tr_));
                         if (s>=1){flag = 0;
-                        cout<<"flag3"<<flag<<endl;}
+                        //cout<<"flag3"<<flag<<endl;
+                        }
                     }
 
-             std::cout << "s: " << s <<std::endl;
+             //std::cout << "s: " << s <<std::endl;
 
 
         }
