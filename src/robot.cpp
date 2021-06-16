@@ -42,7 +42,6 @@ namespace robot {
         std::vector<double> begin_pjs;            //起始位置
         std::vector<double> step_pjs;            //目标位置
     };
-
     auto MoveS::prepareNrt() -> void {
         //初始化这个结构体中的每个成员
         MoveSParam param;
@@ -79,7 +78,6 @@ namespace robot {
         std::vector <std::pair<std::string, std::any>> ret_value;
         ret() = ret_value;
     }
-
     auto MoveS::executeRT() -> int {
         auto &param = std::any_cast<MoveSParam &>(this->param());
         auto time = static_cast<int32_t>(param.time * 1000);        //运行周期
@@ -153,11 +151,8 @@ namespace robot {
         //返回0表示正常结束，返回负数表示报错，返回正数表示正在执行
         return totaltime - count();
     }
-
     auto MoveS::collectNrt() -> void {}
-
     MoveS::~MoveS() = default;
-
     MoveS::MoveS(const std::string &name) {
         //构造函数参数说明，构造函数通过xml的格式定义本条指令的接口，name表示参数名，default表示输入参数，abbreviation表示参数名的缩写(缩写只能单个字符)
         //1 GroupParam下面的各个节点都是输入参数，如果没有给定会使用默认值
@@ -182,9 +177,9 @@ namespace robot {
     auto MoveTest::prepareNrt() -> void {
         dir_ = doubleParam("direction");
     }
-
     auto MoveTest::executeRT() -> int {
         double s_tcp[6];
+        static double begin_pe[6];
         char eu_type[4]{'1', '2', '3', '\0'};
         std::size_t motionNum = controller()->motionPool().size();
         // end-effector //
@@ -200,11 +195,15 @@ namespace robot {
             ee.updMpm();
             return true;
         };
+
         if(!forwardPos()){
             return -1;
         }
+        if(count()==1){
+            ee.getMpe(begin_pe, eu_type);
+        }
         ee.getMpe(s_tcp, eu_type);
-        s_tcp[2] += 0.000001;
+        s_tcp[2] += 0.000005;
         ee.setMpe(s_tcp, eu_type);
         model()->solverPool()[0].kinPos();
         double x_joint[6];
@@ -218,7 +217,7 @@ namespace robot {
             controller()->motionPool()[i].setTargetPos(x_joint[i]);
         }
         std::cout<<controller()->motionPool()[2].targetPos()<<std::endl;
-        if(abs(controller()->motionPool()[2].targetPos())<0.1){
+        if(abs(s_tcp[2]-begin_pe[2])>0.03){
             return 0;
         }
         return 1;
@@ -267,7 +266,6 @@ namespace robot {
     };
     struct MoveJoint::Imp : public MoveJointParam {
     };
-
     auto MoveJoint::prepareNrt() -> void {
         std::cout << "prepare begin" << std::endl;
 
@@ -311,7 +309,6 @@ namespace robot {
         ret() = ret_value;
         std::cout << "prepare finished" << std::endl;
     }
-
     auto MoveJoint::executeRT() -> int {
 
         const int FS_NUM = 7;
@@ -516,7 +513,7 @@ namespace robot {
             double pe_now[6];
             ee.getMpe(pe_now);
             //give a velocity of the end effector
-            double v_now[6]{0,0,-0.2,0,0,0};
+            double v_now[6]{0,0,-0.001,0,0,0};
             ee.setMva(v_now);
             //inverse kinematics
             model()->solverPool()[0].kinVel();
@@ -632,19 +629,12 @@ namespace robot {
             return total_count - count();
         }
     }
-
     auto MoveJoint::collectNrt() -> void {}
-
     MoveJoint::~MoveJoint() = default;
-
     MoveJoint::MoveJoint(const MoveJoint &other) = default;
-
     MoveJoint::MoveJoint(MoveJoint &other) = default;
-
     MoveJoint &MoveJoint::operator=(const MoveJoint &other) = default;
-
     MoveJoint &MoveJoint::operator=(MoveJoint &&other) = default;
-
     MoveJoint::MoveJoint(const std::string &name){
         aris::core::fromXmlString(command(),
                 "<Command name=\"movejoint\">"
@@ -658,6 +648,7 @@ namespace robot {
                 "	</GroupParam>"
                 "</Command>");
     }
+
 /*-----------ImpedPos------------*/
     ImpedPos::ImpedPos(const std::string &name){
         aris::core::fromXmlString(command(),
@@ -666,14 +657,15 @@ namespace robot {
                                   "		<Param name=\"vellimit\" default=\"{0.2,0.2,0.1,0.5,0.5,0.5}\"/>"
                                   "		<Param name=\"damping\" default=\"{0.02,0.02,0.02,0.01,0.01,0.01}\"/>"
                                   "		<Param name=\"k\" default=\"{120,120,120,3,3,3}\"/>"
-                                  "       <Param name=\"K\" default=\"{1,1,1,3,3,3}\"/>"
+                                  "     <Param name=\"K\" default=\"{1,1,1,3,3,3}\"/>"
                                   "		<Param name=\"tool\" default=\"tool0\"/>"
                                   "		<Param name=\"wobj\" default=\"wobj0\"/>"
+                                  "     <Param name=\"Mass\" default=\"1\" abbreviation=\"m\"/>"
+                                  "     <Param name=\"Damp\" default=\"1\" abbreviation=\"b\"/>"
                                   "	</GroupParam>"
                                   "</Command>"
                                   );
     }
-
     struct ImpedPosParam{
         aris::dynamic::Marker * tool, * wobj;
         //parameters in prepareNT
@@ -688,10 +680,10 @@ namespace robot {
         double fs2tpm[16]; //
         float init_force[6]; // compensate the gravity of tool
         bool contacted = false;// flag to show if the end effector contact with the surface
-        double desired_force = 1;
+        double desired_force = 3;
         double ke = 220000;
-        double B = 1;
-        double M = 10;
+        double B = 0.7;//0.7 has a better performance
+        double M = 0.1;//0.1 has a better performance
         double K = 1;
         double loop_period = 1e-3;
     };
@@ -726,6 +718,12 @@ namespace robot {
                 } else {
                     THROW_FILE_LINE("");
                 }
+            }else if (cmd_param.first == "Mass"){
+                auto m = doubleParam(cmd_param.first);
+                imp_->M = m;
+            }else if(cmd_param.first == "Damp"){
+                auto d = doubleParam(cmd_param.first);
+                imp_->B = d;
             }
         }
         for (auto &option : motorOptions())//???
@@ -820,7 +818,8 @@ namespace robot {
             std::cout << "fz:" << net_force[2] << " ";
             std::cout << std::endl;
         }
-        if(abs(net_force[2]) > 0.1)
+
+        if(abs(net_force[2]) > 0.1 || imp_->contacted)
         {
             /*
             * if判断语句的作用：
@@ -842,7 +841,7 @@ namespace robot {
             //get the x_reference of
             double x_r = imp_->x_e - (imp_->desired_force / imp_->ke );
             //calculate the desired acceleration and velocity
-            double a = (net_force[2] - imp_->desired_force - imp_->damping[2]* v_tcp[2] - imp_->K * (s_tcp[2] - x_r))/imp_->M;
+            double a = (net_force[2] - imp_->desired_force - imp_->B* v_tcp[2] )/imp_->M;//- imp_->K * (s_tcp[2] - x_r))/imp_->M;
             double x = s_tcp[2] + 0.5 * a * imp_->loop_period* imp_->loop_period + v_tcp[2] * imp_->loop_period;
             s_tcp[2] = x;
             ee.setMpe(s_tcp, eu_type);
@@ -859,7 +858,7 @@ namespace robot {
                     controller()->motionPool()[i].setTargetPos(x_joint[i]);
                 }
             }
-            if(count() > 15000){
+            if(count() > 50000){
                 std::cout<<"finished"<<std::endl;
                 return 0;
             }
@@ -867,7 +866,7 @@ namespace robot {
             forwardPos();
             double s_tcp[6];
             ee.getMpe(s_tcp, eu_type);
-            s_tcp[2] -= 0.0001;
+            s_tcp[2] -= 0.00001;
             ee.setMpe(s_tcp, eu_type);
             model()->solverPool()[0].kinPos();
             double x_joint[6];
@@ -900,7 +899,6 @@ namespace robot {
     auto ImpedPos::collectNrt() -> void{}
     ImpedPos::~ImpedPos() = default;
     ImpedPos::ImpedPos(const ImpedPos &other) = default;
-
     auto createPlanRoot() -> std::unique_ptr <aris::plan::PlanRoot> {
         std::unique_ptr <aris::plan::PlanRoot> plan_root(new aris::plan::PlanRoot);
         //用户自己开发指令集
