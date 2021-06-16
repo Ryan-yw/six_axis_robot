@@ -655,9 +655,6 @@ namespace robot {
                                   "<Command name=\"impedpos\">"
                                   "	<GroupParam>"
                                   "		<Param name=\"vellimit\" default=\"{0.2,0.2,0.1,0.5,0.5,0.5}\"/>"
-                                  "		<Param name=\"damping\" default=\"{0.02,0.02,0.02,0.01,0.01,0.01}\"/>"
-                                  "		<Param name=\"k\" default=\"{120,120,120,3,3,3}\"/>"
-                                  "     <Param name=\"K\" default=\"{1,1,1,3,3,3}\"/>"
                                   "		<Param name=\"tool\" default=\"tool0\"/>"
                                   "		<Param name=\"wobj\" default=\"wobj0\"/>"
                                   "     <Param name=\"Mass\" default=\"1\" abbreviation=\"m\"/>"
@@ -671,8 +668,6 @@ namespace robot {
         //parameters in prepareNT
         double x_e; //environment position
         double vel_limit[6];//the velocity limitation of motors
-        double damping[6];//the damping factor of every motors
-        double  k[6];//
         //parameters in excuteRT
         double pm_init[16];//the position matrix of the tool center in world frame
         double theta_setup = -90;// the install angle of force sensor
@@ -682,9 +677,9 @@ namespace robot {
         bool contacted = false;// flag to show if the end effector contact with the surface
         double desired_force = 3;
         double ke = 220000;
-        double B = 0.7;//0.7 has a better performance
+        double B = 0.7;//the damping factor of end effector0.7 has a better performance
         double M = 0.1;//0.1 has a better performance
-        double K = 1;
+        double K = 1;//
         double loop_period = 1e-3;
     };
     struct ImpedPos::Imp : public ImpedPosParam{};
@@ -699,22 +694,6 @@ namespace robot {
                 auto a = matrixParam(cmd_param.first);
                 if (a.size() == 6) {
                     std::copy(a.data(), a.data() + 6, imp_->vel_limit);
-                } else {
-                    THROW_FILE_LINE("");
-                }
-            } else if (cmd_param.first == "k") {
-                auto temp = matrixParam(cmd_param.first);
-                if (temp.size() == 6) {
-                    std::copy(temp.data(), temp.data() + 6, imp_->k);
-                } else {
-                    THROW_FILE_LINE("");
-                }
-            } else if (cmd_param.first == "damping") {
-                auto temp = matrixParam(cmd_param.first);
-                if (temp.size() == 1) {
-                    std::fill(imp_->damping, imp_->damping + 6, temp.toDouble());
-                } else if (temp.size() == 6) {
-                    std::copy(temp.data(), temp.data() + 6, imp_->damping);
                 } else {
                     THROW_FILE_LINE("");
                 }
@@ -736,9 +715,8 @@ namespace robot {
     }
     auto ImpedPos::executeRT() ->int
     {
-
         const int FS_NUM = 7;
-        static const std::size_t motionNum = controller()->motionPool().size();
+        static std::size_t motionNum = controller()->motionPool().size();
         // end-effector //
         auto &ee = model()->generalMotionPool()[0];
         // Function Pointer
@@ -818,7 +796,6 @@ namespace robot {
             std::cout << "fz:" << net_force[2] << " ";
             std::cout << std::endl;
         }
-
         if(abs(net_force[2]) > 0.1 || imp_->contacted)
         {
             /*
@@ -899,6 +876,169 @@ namespace robot {
     auto ImpedPos::collectNrt() -> void{}
     ImpedPos::~ImpedPos() = default;
     ImpedPos::ImpedPos(const ImpedPos &other) = default;
+
+    /*-----------Drag------------*/
+    Drag::Drag(const std::string &name)
+    {
+        aris::core::fromXmlString(command(),
+                                  "<Command name=\"drag\">"
+                                  "	<GroupParam>"
+                                  "		<Param name=\"vellimit\" default=\"{0.2,0.2,0.1,0.5,0.5,0.5}\"/>"
+                                  "		<Param name=\"damping\" default=\"{0.2,0.2,0.2,0.1,0.1,0.1}  abbreviation=\"b\"\"/>"
+                                  "     <Param name=\"K\" default=\"{1,1,1,3,3,3}\"/>"
+                                  "		<Param name=\"tool\" default=\"tool0\"/>"
+                                  "		<Param name=\"wobj\" default=\"wobj0\"/>"
+                                  "     <Param name=\"Mass\" default=\"0.1\" abbreviation=\"m\"/>"
+                                  "	</GroupParam>"
+                                  "</Command>"
+                                  );
+    }
+    struct DragParam{
+        aris::dynamic::Marker * tool, * wobj;
+        //parameters in prepareNT
+        double x_e; //environment position
+        double vel_limit[6];//the velocity limitation of motors
+
+        //parameters in excuteRT
+        double pm_init[16];//the position matrix of the tool center in world frame
+        double theta_setup = -90;// the install angle of force sensor
+        double pos_setup = 0.061;// the install position of force sensor
+        double fs2tpm[16]; //
+        float init_force[6]; // compensate the gravity of tool
+        bool contacted = false;// flag to show if the end effector contact with the surface
+        double ke = 220000;
+        double B = 0.7;//the damping factor of end effector0.7 has a better performance
+        double M = 0.1;//0.1 has a better performance
+        double K = 1;//
+        double loop_period = 1e-3;
+    };
+    struct Drag::Imp : public DragParam{};
+    auto Drag::prepareNrt()->void
+    {
+        std::cout<<"prepare begin"<<std::endl;
+        imp_->tool = &*model()->generalMotionPool()[0].makI()->fatherPart().findMarker(cmdParams().at("tool"));
+        imp_->wobj = &*model()->generalMotionPool()[0].makJ()->fatherPart().findMarker(cmdParams().at("wobj"));
+        imp_-> x_e = 0;
+        for (auto cmd_param : cmdParams()) {
+            if (cmd_param.first == "vellimit") {
+                auto a = matrixParam(cmd_param.first);
+                if (a.size() == 6) {
+                    std::copy(a.data(), a.data() + 6, imp_->vel_limit);
+                } else {
+                    THROW_FILE_LINE("");
+                }
+            }else if (cmd_param.first == "damping") {
+                auto temp = matrixParam(cmd_param.first);
+                if (temp.size() == 1) {
+                    std::fill(imp_->B, imp_->B + 6, temp.toDouble());
+                } else if (temp.size() == 6) {
+                    std::copy(temp.data(), temp.data() + 6, imp_->B);
+                } else {
+                    THROW_FILE_LINE("");
+                }
+            }else if (cmd_param.first == "Mass"){
+                auto m = doubleParam(cmd_param.first);
+                imp_->M = m;
+            }
+        }
+        for (auto &option : motorOptions())//???
+        {
+            option |= aris::plan::Plan::NOT_CHECK_POS_CONTINUOUS_SECOND_ORDER |NOT_CHECK_VEL_CONTINUOUS;
+        }
+        std::vector <std::pair<std::string, std::any>> ret_value;
+        ret() = ret_value;
+        std::cout<<"prepare finished"<<std::endl;
+    }
+    auto Drag::executeRT()->int
+    {
+        const int FS_NUM = 7;
+        static std::size_t motionNum = controller()->motionPool().size();
+        // end-effector //
+        auto &ee = model()->generalMotionPool()[0];
+        // Function Pointer
+//        auto &cout = controller()->mout();
+//        auto &lout = controller()->lout();
+        char eu_type[4]{'1', '2', '3', '\0'};
+        // the lambda function to get the force
+        auto get_force_data = [&](float *data){
+            for (std::size_t i =0; i< motionNum;++i)
+            {
+                this->ecController()->slavePool()[FS_NUM].readPdo(0x6020, i + 11, data + i, 32);
+            }
+        };
+        //the function to update model according to real motor and excecute one forward kinematic
+        auto forwardPos = [&](){
+            for(std::size_t i =0; i<motionNum; ++i)
+            {
+                model()->motionPool()[i].setMp(controller()->motionPool()[i].targetPos());
+            }
+            if(model()->solverPool()[1].kinPos())
+            {
+                std::cout<<"forward kinematic failed, exit"<<std::endl;
+            }
+            ee.updMpm();
+        };
+        //safty check the position change
+        auto checkPos = [&](double * data)
+        {
+            for(std::size_t i = 0; i< motionNum; i++)
+            {
+                if(abs(data[i] - controller()->motionPool()[i].targetPos()) > imp_->vel_limit[i]){
+                    std::cout<<"joint "<<i<<" move too fast"<<std::endl;
+                    std::cout<<"pi-1 = "<<controller()->motionPool()[i].targetPos()<<std::endl;
+                    std::cout<<"pi = "<<data[i]<<std::endl;
+                    std::cout<<"vellimit = "<<imp_->vel_limit[i]<<std::endl;
+                    return false;
+                }
+            }
+            return true;
+        };
+        //first loop record
+        if(count() ==1)
+        {
+            //get the current end effector position
+            forwardPos();
+            ee.getMpm(imp_->pm_init);
+            //set the log file
+            controller()->logFileRawName("motion_replay");
+            //get the force transformation matrix in tool frame
+            double theta = (-imp_->theta_setup) * PI / 180;
+            double pq_setup[7]{0.0, 0.0, imp_->pos_setup, 0.0, 0.0, sin(theta / 2.0), cos(theta / 2.0)};
+            s_pq2pm(pq_setup, imp_->fs2tpm);
+            get_force_data(imp_->init_force);
+        }
+        //减去力传感器初始偏置  !!
+//        float force_data[6]{0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+//        double force_data_double[6];
+//        get_force_data(force_data);
+//        for (int i = 0; i < 6; i++)
+//            force_data[i] -= imp_->init_force[i];
+//        for (int i = 0; i < 6; ++i)force_data_double[i] = static_cast<double>(force_data[i]);
+        //获取每个周期末端所受的力
+        double xyz_temp[3]{force_data_double[0], force_data_double[1], force_data_double[2]}, abc_temp[3]{
+                force_data_double[3], force_data_double[4], force_data_double[5]};
+        //get the position of tcp
+        double pm_begin[16];
+        //transform the force to world frame, store in imp_->force_target
+        model()->generalMotionPool().at(0).updMpm();
+        imp_->tool->getPm(*imp_->wobj, pm_begin);
+        double t2bpm[16];
+        s_pm_dot_pm(pm_begin, imp_->fs2tpm, t2bpm);
+        double net_force[6];
+        s_mm(3, 1, 3, t2bpm, aris::dynamic::RowMajor{4}, xyz_temp, 1, net_force, 1);
+        s_mm(3, 1, 3, t2bpm, aris::dynamic::RowMajor{4}, abc_temp, 1, net_force + 3, 1);
+        //force control
+        double a[6]{0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+        for(std::size_t i =0; i<motionNum ; ++i){
+            a[i] = (net_force[2]  - imp_->B* v_tcp[2] )/imp_->M;
+        }
+        return 0;
+
+    }
+    auto Drag::collectNrt() ->void{}
+    Drag::~Drag() = default;
+    Drag::Drag(const Drag &other) =default;
+
     auto createPlanRoot() -> std::unique_ptr <aris::plan::PlanRoot> {
         std::unique_ptr <aris::plan::PlanRoot> plan_root(new aris::plan::PlanRoot);
         //用户自己开发指令集

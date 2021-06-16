@@ -74,6 +74,26 @@ namespace robot
         aris::core::ImpPtr<Imp> imp_;
     };
 
+    class Drag : public aris::core::CloneObject<Drag, aris::plan::Plan>
+    {
+    public:
+        auto virtual prepareNrt()->void;
+        auto virtual executeRT()->int;
+        auto virtual collectNrt()->void;
+        virtual ~Drag();
+        explicit Drag(const std::string &name = "Drag");
+        Drag(const Drag &);
+        Drag(Drag &);
+        Drag& operator=(const Drag &);
+        Drag& operator=(Drag &&);
+
+    private:
+        struct Imp;
+        aris::core::ImpPtr<Imp> imp_;
+    };
+
+
+
 //
 
     auto createPlanRoot()->std::unique_ptr<aris::plan::PlanRoot>;
