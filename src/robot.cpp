@@ -184,102 +184,59 @@ namespace robot {
     }
 
     auto MoveTest::executeRT() -> int {
-        static double begin_pe[6];
-
+        double s_tcp[6];
+        char eu_type[4]{'1', '2', '3', '\0'};
+        std::size_t motionNum = controller()->motionPool().size();
         // end-effector //
         auto &ee = model()->generalMotionPool()[0];
-        double pe[6] = {0};
-        double pre_step[] = {0};
-
-        // get begin pe //
-        if (count() == 1) {
-            // get position from controller //
-            for (std::size_t i = 0; i < model()->motionPool().size(); ++i) {
+        auto forwardPos = [&](){
+            for(std::size_t i =0; i <motionNum; ++i){
                 model()->motionPool()[i].setMp(controller()->motionPool()[i].targetPos());
             }
-
-            // forward kinematic //
-            model()->solverPool()[1].kinPos();
-
-            // update ee //
+            if(model()->solverPool()[1].kinPos()){
+                std::cout<<"forward kinematic failed"<<std::endl;
+                return false;
+            }
             ee.updMpm();
-
-            // get ee pe //
-            ee.getMpe(begin_pe);
-
+            return true;
+        };
+        if(!forwardPos()){
+            return -1;
         }
-        std::copy(begin_pe, begin_pe + 6, pe);
-        // trajectory generation //
-
-//        pe[0] += dir_ * 0.1 * (1.0 - std::cos(count() / 1000.0 * PI))/2.0;
-
-        // trajectory generation ellipse//
-//        TCurve s1(5,2);
-//        s1.getCurveParam();
-//        pe[0] += dir_*0.1*s1.getTCurve(count());
-
-
-        TCurve s1(5, 2);
-        s1.getCurveParam();
-        EllipseTrajectory e1(-1, 0.8, 0, s1);
-        e1.getEllipseTrajectory(count());
-
-        //   mout() << "step:" << dir_*0.1 * e1.z_ << " " << dir_*0.1 * e1.x_ << " " << 0.1 * e1.y_ << std::endl;
-        //    mout() << "pe:" << pe[0] << " " << pe[1] << " " << pe[2] << std::endl;
-//    pe[0] = begin_pe[0] + dir_*0.1 * e1.z_;
-//    pe[1] = begin_pe[0] + dir_*0.1 * e1.x_;
-//    pe[2] = begin_pe[0] + 0.1 * e1.y_;
-
-        pe[0] += dir_ * s1.getTCurve(count());
-        // pe[1] += 0.000005;
-        //  pe[2] += 0.000005;
-
-//mout() << "pe:" << pe[0] << " " << pe[1] << " " << pe[2] << std::endl;
-//mout()<<std::endl;
-        //aris::dynamic::dsp(1,3,pe);
-
-
-
-
-        // inverse kinematic //
-        ee.setMpe(pe);
+        ee.getMpe(s_tcp, eu_type);
+        s_tcp[2] += 0.000001;
+        ee.setMpe(s_tcp, eu_type);
         model()->solverPool()[0].kinPos();
-
-        // get input //
-//    double input[6];
-        for (std::size_t i = 0; i < model()->motionPool().size(); ++i) {
+        double x_joint[6];
+        for(std::size_t i = 0; i<motionNum; ++i)
+        {
             model()->motionPool()[i].updMp();
-            //controller()->motionPool()[i].setTargetPos(model()->motionPool()[i].mp());
+            x_joint[i] = model()->motionPool()[i].mp();
         }
-
-        // print //
-        // if(count() % 100 == 0)
-        //    mout() << pe[0] << "  "<< pe[1]<<"  " << pe[2]<<"  "<< pe[3] << "  "<< pe[4]<<"  " << pe[5] << std::endl;
-
-        // log //
-        lout() << pe[0] << "  " << pe[1] << "  " << pe[2] << "  " << pe[3] << "  " << pe[4] << "  " << pe[5]
-               << std::endl;
-
-        return s1.Tc_ * 1000 - count();
-
+        for(std::size_t i = 0; i<motionNum; ++i)
+        {
+            controller()->motionPool()[i].setTargetPos(x_joint[i]);
+        }
+        std::cout<<controller()->motionPool()[2].targetPos()<<std::endl;
+        if(abs(controller()->motionPool()[2].targetPos())<0.1){
+            return 0;
+        }
+        return 1;
     }
-
-    MoveTest::MoveTest(const std::string &name) : Plan(name) {
+    auto MoveTest::collectNrt() ->void{};
+    MoveTest::MoveTest(const std::string &name){
         //command().loadXmlStr(
         aris::core::fromXmlString(command(),
                 "<Command name=\"mv\">"
                 "	<Param name=\"direction\" default=\"1\" abbreviation=\"d\"/>"
                 "</Command>");
     }
+    MoveTest &MoveTest::operator=(const MoveTest &other) = default;
+    MoveTest &MoveTest::operator=(MoveTest &&other) = default;
+    MoveTest::~MoveTest() = default;
+    MoveTest::MoveTest(const MoveTest &other) = default;
 
 /*-----------Move Joint------------*/
-// 导纳控制 //
-    static std::atomic_int x = 0;
-    static std::atomic_int y = 0;
-    static std::atomic_int z = 0;
-    static std::atomic_int rx = 0;
-    static std::atomic_int ry = 0;
-    static std::atomic_int rz = 0;
     static std::atomic_bool enable_mvJoint = true;
     struct MoveJointParam {
         aris::dynamic::Marker *tool, *wobj;
@@ -419,9 +376,6 @@ namespace robot {
             std::cout << "fz:" << imp_->force_target[2] << " ";
             std::cout << std::endl;
         }
-
-
-
         if (abs(imp_->force_target[2]) > 0.1) {
             /*
             * if判断语句的作用：
@@ -704,11 +658,7 @@ namespace robot {
                 "	</GroupParam>"
                 "</Command>");
     }
-
-
-
-
-
+/*-----------ImpedPos------------*/
     ImpedPos::ImpedPos(const std::string &name){
         aris::core::fromXmlString(command(),
                                   "<Command name=\"impedpos\">"
@@ -738,10 +688,10 @@ namespace robot {
         double fs2tpm[16]; //
         float init_force[6]; // compensate the gravity of tool
         bool contacted = false;// flag to show if the end effector contact with the surface
-        double desired_force;
+        double desired_force = 1;
         double ke = 220000;
         double B = 1;
-        double M = 1;
+        double M = 10;
         double K = 1;
         double loop_period = 1e-3;
     };
@@ -791,7 +741,6 @@ namespace robot {
 
         const int FS_NUM = 7;
         static const std::size_t motionNum = controller()->motionPool().size();
-
         // end-effector //
         auto &ee = model()->generalMotionPool()[0];
         // Function Pointer
@@ -873,7 +822,6 @@ namespace robot {
         }
         if(abs(net_force[2]) > 0.1)
         {
-            std::cout<<"contacted!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
             /*
             * if判断语句的作用：
             * abs(imp_->force_target[2])>0.1 表示已经与目标物体接触；
@@ -895,13 +843,14 @@ namespace robot {
             double x_r = imp_->x_e - (imp_->desired_force / imp_->ke );
             //calculate the desired acceleration and velocity
             double a = (net_force[2] - imp_->desired_force - imp_->damping[2]* v_tcp[2] - imp_->K * (s_tcp[2] - x_r))/imp_->M;
-            double x = s_tcp[2] + 0.5* a * imp_->loop_period* imp_->loop_period;
+            double x = s_tcp[2] + 0.5 * a * imp_->loop_period* imp_->loop_period + v_tcp[2] * imp_->loop_period;
             s_tcp[2] = x;
             ee.setMpe(s_tcp, eu_type);
             model()->solverPool()[0].kinPos();
             double x_joint[6];
             for(std::size_t i = 0; i<motionNum; ++i)
             {
+                model()->motionPool()[i].updMp();
                 x_joint[i] = model()->motionPool()[i].mp();
             }
             if(checkPos(x_joint)){
@@ -909,6 +858,10 @@ namespace robot {
                 {
                     controller()->motionPool()[i].setTargetPos(x_joint[i]);
                 }
+            }
+            if(count() > 15000){
+                std::cout<<"finished"<<std::endl;
+                return 0;
             }
         }else{
             forwardPos();
@@ -920,6 +873,7 @@ namespace robot {
             double x_joint[6];
             for(std::size_t i = 0; i<motionNum; ++i)
             {
+                model()->motionPool()[i].updMp();
                 x_joint[i] = model()->motionPool()[i].mp();
             }
             if(checkPos(x_joint)){
@@ -944,16 +898,14 @@ namespace robot {
         }
     }
     auto ImpedPos::collectNrt() -> void{}
-
     ImpedPos::~ImpedPos() = default;
-
     ImpedPos::ImpedPos(const ImpedPos &other) = default;
 
     auto createPlanRoot() -> std::unique_ptr <aris::plan::PlanRoot> {
         std::unique_ptr <aris::plan::PlanRoot> plan_root(new aris::plan::PlanRoot);
         //用户自己开发指令集
 //        plan_root->planPool().add<robot::MoveS>();
-//        plan_root->planPool().add<robot::MoveTest>();
+        plan_root->planPool().add<robot::MoveTest>();
         plan_root->planPool().add<robot::MoveJoint>();
         plan_root->planPool().add<robot::ImpedPos>();
 

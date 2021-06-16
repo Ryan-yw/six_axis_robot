@@ -40,15 +40,19 @@ namespace robot
         aris::core::ImpPtr<Imp> imp_;
     };
 
-    class MoveTest :public aris::plan::Plan
+    class MoveTest :public aris::core::CloneObject<MoveTest, aris::plan::Plan>
     {
     public:
         auto virtual prepareNrt()->void;
         auto virtual executeRT()->int;
-
+        auto virtual collectNrt()->void;
+        virtual ~MoveTest();
         explicit MoveTest(const std::string &name = "mv_test");
     //    ARIS_REGISTER_TYPE(MoveTest);
-
+        MoveTest(const MoveTest &);
+        MoveTest(MoveTest &);
+        MoveTest& operator=(const MoveTest &);
+        MoveTest& operator=(MoveTest &&);
         double dir_{1};
     };
 
