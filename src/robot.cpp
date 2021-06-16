@@ -707,24 +707,255 @@ namespace robot {
 
 
 
-//------------------------//
-
-//    ARIS_REGISTRATION
-//            {
-//                aris::core::class_<MoveS>("MoveS")
-//                        .inherit<Plan>();
-
-//                aris::core::class_<MoveTest>("MoveTest")
-//                        .inherit<Plan>();
 
 
-//            }
+    ImpedPos::ImpedPos(const std::string &name){
+        aris::core::fromXmlString(command(),
+                                  "<Command name=\"impedpos\">"
+                                  "	<GroupParam>"
+                                  "		<Param name=\"vellimit\" default=\"{0.2,0.2,0.1,0.5,0.5,0.5}\"/>"
+                                  "		<Param name=\"damping\" default=\"{0.02,0.02,0.02,0.01,0.01,0.01}\"/>"
+                                  "		<Param name=\"k\" default=\"{120,120,120,3,3,3}\"/>"
+                                  "       <Param name=\"K\" default=\"{1,1,1,3,3,3}\"/>"
+                                  "		<Param name=\"tool\" default=\"tool0\"/>"
+                                  "		<Param name=\"wobj\" default=\"wobj0\"/>"
+                                  "	</GroupParam>"
+                                  "</Command>"
+                                  );
+    }
+
+    struct ImpedPosParam{
+        aris::dynamic::Marker * tool, * wobj;
+        //parameters in prepareNT
+        double x_e; //environment position
+        double vel_limit[6];//the velocity limitation of motors
+        double damping[6];//the damping factor of every motors
+        double  k[6];//
+        //parameters in excuteRT
+        double pm_init[16];//the position matrix of the tool center in world frame
+        double theta_setup = -90;// the install angle of force sensor
+        double pos_setup = 0.061;// the install position of force sensor
+        double fs2tpm[16]; //
+        float init_force[6]; // compensate the gravity of tool
+        bool contacted = false;// flag to show if the end effector contact with the surface
+        double desired_force;
+        double ke = 220000;
+        double B = 1;
+        double M = 1;
+        double K = 1;
+        double loop_period = 1e-3;
+    };
+    struct ImpedPos::Imp : public ImpedPosParam{};
+    auto ImpedPos::prepareNrt() -> void
+    {
+        std::cout<<"prepare begin"<<std::endl;
+        imp_->tool = &*model()->generalMotionPool()[0].makI()->fatherPart().findMarker(cmdParams().at("tool"));
+        imp_->wobj = &*model()->generalMotionPool()[0].makJ()->fatherPart().findMarker(cmdParams().at("wobj"));
+        imp_-> x_e = 0;
+        for (auto cmd_param : cmdParams()) {
+            if (cmd_param.first == "vellimit") {
+                auto a = matrixParam(cmd_param.first);
+                if (a.size() == 6) {
+                    std::copy(a.data(), a.data() + 6, imp_->vel_limit);
+                } else {
+                    THROW_FILE_LINE("");
+                }
+            } else if (cmd_param.first == "k") {
+                auto temp = matrixParam(cmd_param.first);
+                if (temp.size() == 6) {
+                    std::copy(temp.data(), temp.data() + 6, imp_->k);
+                } else {
+                    THROW_FILE_LINE("");
+                }
+            } else if (cmd_param.first == "damping") {
+                auto temp = matrixParam(cmd_param.first);
+                if (temp.size() == 1) {
+                    std::fill(imp_->damping, imp_->damping + 6, temp.toDouble());
+                } else if (temp.size() == 6) {
+                    std::copy(temp.data(), temp.data() + 6, imp_->damping);
+                } else {
+                    THROW_FILE_LINE("");
+                }
+            }
+        }
+        for (auto &option : motorOptions())//???
+        {
+            option |= aris::plan::Plan::NOT_CHECK_POS_CONTINUOUS_SECOND_ORDER |NOT_CHECK_VEL_CONTINUOUS;
+        }
+        std::vector <std::pair<std::string, std::any>> ret_value;
+        ret() = ret_value;
+        std::cout<<"prepare finished"<<std::endl;
+    }
+    auto ImpedPos::executeRT() ->int
+    {
+
+        const int FS_NUM = 7;
+        static const std::size_t motionNum = controller()->motionPool().size();
+
+        // end-effector //
+        auto &ee = model()->generalMotionPool()[0];
+        // Function Pointer
+//        auto &cout = controller()->mout();
+//        auto &lout = controller()->lout();
+        char eu_type[4]{'1', '2', '3', '\0'};
+        // the lambda function to get the force
+        auto get_force_data = [&](float *data){
+            for (std::size_t i =0; i< motionNum;++i)
+            {
+                this->ecController()->slavePool()[FS_NUM].readPdo(0x6020, i + 11, data + i, 32);
+            }
+        };
+        //the function to update model according to real motor and excecute one forward kinematic
+        auto forwardPos = [&](){
+            for(std::size_t i =0; i<motionNum; ++i)
+            {
+                model()->motionPool()[i].setMp(controller()->motionPool()[i].targetPos());
+            }
+            if(model()->solverPool()[1].kinPos())
+            {
+                std::cout<<"forward kinematic failed, exit"<<std::endl;
+            }
+            ee.updMpm();
+        };
+        //safty check the position change
+        auto checkPos = [&](double * data)
+        {
+            for(std::size_t i = 0; i< motionNum; i++)
+            {
+                if(abs(data[i] - controller()->motionPool()[i].targetPos()) > imp_->vel_limit[i]){
+                    std::cout<<"joint "<<i<<" move too fast"<<std::endl;
+                    std::cout<<"pi-1 = "<<controller()->motionPool()[i].targetPos()<<std::endl;
+                    std::cout<<"pi = "<<data[i]<<std::endl;
+                    std::cout<<"vellimit = "<<imp_->vel_limit[i]<<std::endl;
+                    return false;
+                }
+            }
+            return true;
+        };
+        //first loop record
+        if(count() ==1)
+        {
+            //get the current end effector position
+            forwardPos();
+            ee.getMpm(imp_->pm_init);
+            //set the log file
+            controller()->logFileRawName("motion_replay");
+            //get the force transformation matrix in tool frame
+            double theta = (-imp_->theta_setup) * PI / 180;
+            double pq_setup[7]{0.0, 0.0, imp_->pos_setup, 0.0, 0.0, sin(theta / 2.0), cos(theta / 2.0)};
+            s_pq2pm(pq_setup, imp_->fs2tpm);
+            get_force_data(imp_->init_force);
+        }
+        //减去力传感器初始偏置
+        float force_data[6]{0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+        double force_data_double[6];
+        get_force_data(force_data);
+        for (int i = 0; i < 6; i++)
+            force_data[i] -= imp_->init_force[i];
+        for (int i = 0; i < 6; ++i)force_data_double[i] = static_cast<double>(force_data[i]);
+        //获取每个周期末端所受的力
+        double xyz_temp[3]{force_data_double[0], force_data_double[1], force_data_double[2]}, abc_temp[3]{
+                force_data_double[3], force_data_double[4], force_data_double[5]};
+        //get the position of tcp
+        double pm_begin[16];
+        //transform the force to world frame, store in imp_->force_target
+        model()->generalMotionPool().at(0).updMpm();
+        imp_->tool->getPm(*imp_->wobj, pm_begin);
+        double t2bpm[16];
+        s_pm_dot_pm(pm_begin, imp_->fs2tpm, t2bpm);
+        double net_force[6];
+        s_mm(3, 1, 3, t2bpm, aris::dynamic::RowMajor{4}, xyz_temp, 1, net_force, 1);
+        s_mm(3, 1, 3, t2bpm, aris::dynamic::RowMajor{4}, abc_temp, 1, net_force + 3, 1);
+        //print the force of z
+        if (count() % 500 == 0) {
+            std::cout << "fz:" << net_force[2] << " ";
+            std::cout << std::endl;
+        }
+        if(abs(net_force[2]) > 0.1)
+        {
+            std::cout<<"contacted!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
+            /*
+            * if判断语句的作用：
+            * abs(imp_->force_target[2])>0.1 表示已经与目标物体接触；
+            * else表示还没接触的时候；
+            * 如果没有接触就以指定速度下降，如果产生接触则执行阻抗控制命令；
+            */
+            double v_tcp[6];
+            double s_tcp[6];
+            //get the velocity of tool center
+            model()->generalMotionPool().at(0).getMve(v_tcp,eu_type);
+            //get the position of tool center
+            model()->generalMotionPool().at(0).getMpe(s_tcp,eu_type);
+            //get the x_environment as soon as contact happens
+            if(!imp_->contacted){
+                imp_->contacted = true;
+                imp_->x_e = s_tcp[2];
+            }
+            //get the x_reference of
+            double x_r = imp_->x_e - (imp_->desired_force / imp_->ke );
+            //calculate the desired acceleration and velocity
+            double a = (net_force[2] - imp_->desired_force - imp_->damping[2]* v_tcp[2] - imp_->K * (s_tcp[2] - x_r))/imp_->M;
+            double x = s_tcp[2] + 0.5* a * imp_->loop_period* imp_->loop_period;
+            s_tcp[2] = x;
+            ee.setMpe(s_tcp, eu_type);
+            model()->solverPool()[0].kinPos();
+            double x_joint[6];
+            for(std::size_t i = 0; i<motionNum; ++i)
+            {
+                x_joint[i] = model()->motionPool()[i].mp();
+            }
+            if(checkPos(x_joint)){
+                for(std::size_t i = 0; i<motionNum; ++i)
+                {
+                    controller()->motionPool()[i].setTargetPos(x_joint[i]);
+                }
+            }
+        }else{
+            forwardPos();
+            double s_tcp[6];
+            ee.getMpe(s_tcp, eu_type);
+            s_tcp[2] -= 0.0001;
+            ee.setMpe(s_tcp, eu_type);
+            model()->solverPool()[0].kinPos();
+            double x_joint[6];
+            for(std::size_t i = 0; i<motionNum; ++i)
+            {
+                x_joint[i] = model()->motionPool()[i].mp();
+            }
+            if(checkPos(x_joint)){
+                for(std::size_t i = 0; i<motionNum; ++i)
+                {
+                    controller()->motionPool()[i].setTargetPos(x_joint[i]);
+                }
+            }
+        }
+        // 运动学正解 //
+        if (model()->solverPool().at(1).kinPos()){
+            std::cout<<"forward kinematic failed";
+            return -1;
+        }
+
+        static aris::Size total_count = 1;
+        if (enable_mvJoint.load()) {//???
+            total_count = count() + 1000;
+            return 1;
+        } else {
+            return total_count - count();
+        }
+    }
+    auto ImpedPos::collectNrt() -> void{}
+
+    ImpedPos::~ImpedPos() = default;
+
+    ImpedPos::ImpedPos(const ImpedPos &other) = default;
+
     auto createPlanRoot() -> std::unique_ptr <aris::plan::PlanRoot> {
         std::unique_ptr <aris::plan::PlanRoot> plan_root(new aris::plan::PlanRoot);
         //用户自己开发指令集
 //        plan_root->planPool().add<robot::MoveS>();
 //        plan_root->planPool().add<robot::MoveTest>();
         plan_root->planPool().add<robot::MoveJoint>();
+        plan_root->planPool().add<robot::ImpedPos>();
 
 
         //aris库提供指令集

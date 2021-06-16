@@ -52,6 +52,24 @@ namespace robot
         double dir_{1};
     };
 
+    class ImpedPos : public aris::core::CloneObject<ImpedPos, aris::plan::Plan>
+    {
+    public:
+        auto virtual prepareNrt()->void;
+        auto virtual executeRT()->int;
+        auto virtual collectNrt()->void;
+        virtual ~ImpedPos();
+        explicit ImpedPos(const std::string &name = "Impedence control");
+        ImpedPos(const ImpedPos &);
+        ImpedPos(ImpedPos &);
+        ImpedPos& operator=(const ImpedPos &);
+        ImpedPos& operator=(ImpedPos &&);
+
+    private:
+        struct Imp;
+        aris::core::ImpPtr<Imp> imp_;
+    };
+
 //
 
     auto createPlanRoot()->std::unique_ptr<aris::plan::PlanRoot>;
