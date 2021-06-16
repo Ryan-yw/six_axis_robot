@@ -1,0 +1,5 @@
+#ignore all files in directory 
+
+cmake-build-debug/
+
+/CMakeList.txt.user
