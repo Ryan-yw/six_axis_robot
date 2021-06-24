@@ -897,8 +897,8 @@ namespace robot {
                                   "		<Param name=\"vellimit\" default=\"{0.2,0.2,0.1,0.5,0.5,0.5}\"/>"
                                   "		<Param name=\"tool\" default=\"tool0\"/>"
                                   "		<Param name=\"wobj\" default=\"wobj0\"/>"
-                                  "     <Param name=\"Mass\" default=\"0.05\" abbreviation=\"m\"/>"
-                                  "     <Param name=\"Damp\" default=\"0.025\" abbreviation=\"b\"/>"
+                                  "     <Param name=\"Mass\" default=\"{1.0,1.0,1.0,1.0,1.0,1.0}\" abbreviation=\"m\"/>"
+                                  "     <Param name=\"Damp\" default=\"{0.8,0.8,0.8,0.2,0.2,0.2}\" abbreviation=\"b\"/>"
                                   "	</GroupParam>"
                                   "</Command>"
                                   );
@@ -914,13 +914,12 @@ namespace robot {
         double pos_setup = 0.061;// the install position of force sensor
         double fs2tpm[16]; //
         float init_force[6]; // compensate the gravity of tool
-        bool contacted = false;// flag to show if the end effector contact with the surface
-        double desired_force = 0;
         double ke = 220000;
-        double B = 0.025;//the damping factor of end effector0.7 has a better performance
-        double M = 0.05;//0.1 has a better performance
+        double B[6]{0.25,0.25,0.25,0.0,0.0,0.0};//the damping factor of end effector0.7 has a better performance
+        double M[6]{0.25,0.25,0.25,1,1,1};//0.1 has a better performance
         double K = 1;//
         double loop_period = 1e-3;
+        double last_v[6]{0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
     };
     struct Drag::Imp : public DragParam{};
     auto Drag::prepareNrt() -> void
@@ -938,11 +937,27 @@ namespace robot {
                     THROW_FILE_LINE("");
                 }
             }else if (cmd_param.first == "Mass"){
-                auto m = doubleParam(cmd_param.first);
-                imp_->M = m;
+                auto m = matrixParam(cmd_param.first);
+                if (m.size() == 6) {
+                    std::copy(m.data(), m.data() + 6, imp_->M);
+                }else if (m.size() == 1) {
+                    std::copy(m.data(), m.data()+1, imp_->M);
+                    std::copy(m.data(), m.data() + 1, imp_->M+1);
+                    std::copy(m.data(), m.data() + 1, imp_->M+2);
+                }else{
+                    THROW_FILE_LINE("");
+                }
             }else if(cmd_param.first == "Damp"){
-                auto d = doubleParam(cmd_param.first);
-                imp_->B = d;
+                auto m = matrixParam(cmd_param.first);
+                if (m.size() == 6) {
+                    std::copy(m.data(), m.data() + 6, imp_->B);
+                }else if (m.size() == 1) {
+                    std::copy(m.data(), m.data()+1, imp_->B);
+                    std::copy(m.data(), m.data() + 1, imp_->B+1);
+                    std::copy(m.data(), m.data() + 1, imp_->B+2);
+                }else{
+                    THROW_FILE_LINE("");
+                }
             }
         }
         for (auto &option : motorOptions())//???
@@ -981,22 +996,7 @@ namespace robot {
                 std::cout<<"forward kinematic failed, exit"<<std::endl;
             }
             ee.updMpm();
-        };
-        //safty check the position change
-        auto checkPos = [&](double * data)
-        {
-            for(std::size_t i = 0; i< motionNum; i++)
-            {
-                if(abs(data[i] - controller()->motionPool()[i].targetPos()) > imp_->vel_limit[i]){
-                    std::cout<<"joint "<<i<<" move too fast"<<std::endl;
-                    std::cout<<"pi-1 = "<<controller()->motionPool()[i].targetPos()<<std::endl;
-                    std::cout<<"pi = "<<data[i]<<std::endl;
-                    std::cout<<"vellimit = "<<imp_->vel_limit[i]<<std::endl;
-                    return false;
-                }
-            }
-            return true;
-        };
+            };
         //first loop record
         if(count() ==1)
         {
@@ -1032,73 +1032,55 @@ namespace robot {
         s_mm(3, 1, 3, t2bpm, aris::dynamic::RowMajor{4}, xyz_temp, 1, net_force, 1);
         s_mm(3, 1, 3, t2bpm, aris::dynamic::RowMajor{4}, abc_temp, 1, net_force + 3, 1);
         //print the force of z
-        double v_tcp[6];
         if (count() % 100 == 0) {
-            model()->generalMotionPool().at(0).getMve(v_tcp, eu_type);
-            std::cout << "fz:" << net_force[2] ;//<< " v_tcp[2] : "<<v_tcp[2];
-
+            std::cout << "fz:" << net_force[0] ;//<< " v_tcp[2] : "<<v_tcp[2];
+            std::cout<<std::endl;
         }
-        if(abs(net_force[2]) > 0.1 || imp_->contacted)
-        {
-            /*
-            * if判断语句的作用：
-            * abs(imp_->force_target[2])>0.1 表示已经与目标物体接触；
-            * else表示还没接触的时候；
-            * 如果没有接触就以指定速度下降，如果产生接触则执行阻抗控制命令；
-            */
+        double s_tcp[6];
+        //get the position of tool center
+        model()->generalMotionPool().at(0).getMpe(s_tcp,eu_type);
+        double a[6]{0,0,0,0,0,0};
+        double v[6]{0,0,0,0,0,0};
+        double x[6]{0,0,0,0,0,0};
 
-            double s_tcp[6];
-            //get the velocity of tool center
-            model()->generalMotionPool().at(0).getMve(v_tcp,eu_type);
-            //get the position of tool center
-            model()->generalMotionPool().at(0).getMpe(s_tcp,eu_type);
-            //get the x_environment as soon as contact happens
-            if(!imp_->contacted){
-                imp_->contacted = true;
-                imp_->x_e = s_tcp[2];
-            }
-            //get the x_reference of
-            double x_r = imp_->x_e - (imp_->desired_force / imp_->ke );
-            //calculate the desired acceleration and velocity
-            double a = (net_force[2] - imp_->desired_force- imp_->B* v_tcp[2] )/imp_->M;//- imp_->K * (s_tcp[2] - x_r))/imp_->M;
-            double x = s_tcp[2] + 0.5 * a * imp_->loop_period* imp_->loop_period + v_tcp[2] * imp_->loop_period;
-            double v = (x - s_tcp[2]);
+
+        for(std::size_t i =0 ;i < 3 ; i++){
+
+            a[i] = (net_force[i])/imp_->M[i];//- imp_->K * (s_tcp[2] - x_r))/imp_->M;
+            v[i] = a[i] * imp_->loop_period * imp_->loop_period + imp_->B[i]*imp_->last_v[i];
+            imp_->last_v[i] = v[i];
+            x[i] = s_tcp[i] + v[i];
+            double max =0.00010;
             //prevent the abrupt change
-            if(abs(v) > 0.00003){
-                v=v>0?0.00003:-0.00003;
-                std::cout<<"speed reaches the maximum value"<<std::endl;
+            if(abs(v[i]) > max){
+                x[i]=v[i]>0?(s_tcp[i]+max):(s_tcp[i]-max);
+                v[i]=v[i]>0?max:-max;
+                imp_->last_v[i] = v[i];
+                {std::cout<<"speed reaches the maximum value"<<std::endl;}
             }
-            x = s_tcp[2] + v;
-            if (count() % 100 == 0) {
-                model()->generalMotionPool().at(0).getMve(v_tcp, eu_type);
-                std::cout << " a: " <<a << " v : "<<v<< " x : "<<x;
-                std::cout << std::endl;
-            }
-            double ee_v [6]{0.0,0.0,v,0.0,0.0,0.0};
-            s_tcp[2] = x;
-            ee.setMpe(s_tcp, eu_type);
-            model()->solverPool()[0].kinPos();
-            double x_joint[6];
-            for(std::size_t i = 0; i<motionNum; ++i)
-            {
-                model()->motionPool()[i].updMp();
-                x_joint[i] = model()->motionPool()[i].mp();
-            }
-            if(checkPos(x_joint)){
-                for(std::size_t i = 0; i<motionNum; ++i)
-                {
-                    controller()->motionPool()[i].setTargetPos(x_joint[i]);
-                }
-                ee.setMve(ee_v,eu_type);
-            }
-            if(count() > 50000){
-                std::cout<<"finished"<<std::endl;
-                return 0;
-            }
-        }else{
-            forwardPos();
-            return 1;
+            s_tcp[i] = x[i];
         }
+
+        //calculate the desired acceleration and velocity
+        ee.setMpe(s_tcp, eu_type);
+        model()->solverPool()[0].kinPos();
+        double x_joint[6];
+        for(std::size_t i = 0; i<motionNum; ++i)
+        {
+            model()->motionPool()[i].updMp();
+            x_joint[i] = model()->motionPool()[i].mp();
+        }
+        for(std::size_t i = 0; i<motionNum; ++i)
+        {
+            controller()->motionPool()[i].setTargetPos(x_joint[i]);
+        }
+
+
+        if(count() > 20000){
+            std::cout<<"finished"<<std::endl;
+            return 0;
+        }
+
         // 运动学正解 //
         if (model()->solverPool().at(1).kinPos()){
             std::cout<<"forward kinematic failed";
