@@ -897,8 +897,8 @@ namespace robot {
                                   "		<Param name=\"vellimit\" default=\"{0.2,0.2,0.1,0.5,0.5,0.5}\"/>"
                                   "		<Param name=\"tool\" default=\"tool0\"/>"
                                   "		<Param name=\"wobj\" default=\"wobj0\"/>"
-                                  "     <Param name=\"Mass\" default=\"{1.0,1.0,1.0,1.0,1.0,1.0}\" abbreviation=\"m\"/>"
-                                  "     <Param name=\"Damp\" default=\"{0.8,0.8,0.8,0.2,0.2,0.2}\" abbreviation=\"b\"/>"
+                                  "     <Param name=\"Mass\" default=\"{0.3,0.3,0.3,1.0,1.0,1.0}\" abbreviation=\"m\"/>"
+                                  "     <Param name=\"Damp\" default=\"{0.9,0.9,0.9,0.0,0.0,0.0}\" abbreviation=\"b\"/>"
                                   "	</GroupParam>"
                                   "</Command>"
                                   );
@@ -941,9 +941,9 @@ namespace robot {
                 if (m.size() == 6) {
                     std::copy(m.data(), m.data() + 6, imp_->M);
                 }else if (m.size() == 1) {
-                    std::copy(m.data(), m.data()+1, imp_->M);
-                    std::copy(m.data(), m.data() + 1, imp_->M+1);
-                    std::copy(m.data(), m.data() + 1, imp_->M+2);
+                    std::copy(m.data(), m.data()+1, imp_->M+3);
+                    std::copy(m.data(), m.data() + 1, imp_->M+4);
+                    std::copy(m.data(), m.data() + 1, imp_->M+5);
                 }else{
                     THROW_FILE_LINE("");
                 }
@@ -952,9 +952,9 @@ namespace robot {
                 if (m.size() == 6) {
                     std::copy(m.data(), m.data() + 6, imp_->B);
                 }else if (m.size() == 1) {
-                    std::copy(m.data(), m.data()+1, imp_->B);
-                    std::copy(m.data(), m.data() + 1, imp_->B+1);
-                    std::copy(m.data(), m.data() + 1, imp_->B+2);
+                    std::copy(m.data(), m.data()+1, imp_->B+3);
+                    std::copy(m.data(), m.data() + 1, imp_->B+4);
+                    std::copy(m.data(), m.data() + 1, imp_->B+5);
                 }else{
                     THROW_FILE_LINE("");
                 }
@@ -1028,6 +1028,7 @@ namespace robot {
         imp_->tool->getPm(*imp_->wobj, pm_begin);
         double t2bpm[16];
         s_pm_dot_pm(pm_begin, imp_->fs2tpm, t2bpm);
+
         double net_force[6];
         s_mm(3, 1, 3, t2bpm, aris::dynamic::RowMajor{4}, xyz_temp, 1, net_force, 1);
         s_mm(3, 1, 3, t2bpm, aris::dynamic::RowMajor{4}, abc_temp, 1, net_force + 3, 1);
@@ -1045,7 +1046,6 @@ namespace robot {
 
 
         for(std::size_t i =0 ;i < 3 ; i++){
-
             a[i] = (net_force[i])/imp_->M[i];//- imp_->K * (s_tcp[2] - x_r))/imp_->M;
             v[i] = a[i] * imp_->loop_period * imp_->loop_period + imp_->B[i]*imp_->last_v[i];
             imp_->last_v[i] = v[i];
@@ -1061,7 +1061,52 @@ namespace robot {
             s_tcp[i] = x[i];
         }
 
-        //calculate the desired acceleration and velocity
+        //rotation part
+        for(std::size_t i=3 ; i < 6; i++){
+            //get the desired angular acceleration, get the desired angular velocity
+            a[i] = (net_force[i])/imp_->M[i];//- imp_->K * (s_tcp[2] - x_r))/imp_->M;
+            v[i] = a[i] * imp_->loop_period * imp_->loop_period + imp_->B[i]*imp_->last_v[i];
+            imp_->last_v[i] = v[i];
+        }
+        double re[3]{0,0,0};
+        std::copy(s_tcp+3,s_tcp+6,re);
+        double rm_init[9];
+        s_re2rm(re,rm_init,eu_type);
+        double rm[9]{0,0,0,0,0,0,0,0,0};
+        double omega[3]{v[3],v[4],v[5]};
+
+        //get the scale of angular velocity
+
+        double scale = s_norm(3,omega);
+        std::cout<<scale<<std::endl;
+        //scale upper limit
+        double rot_max = 0.0005;
+        if(scale >= rot_max){
+            scale = rot_max;
+            std::cout<<"rot reach upper bound"<<std::endl;
+        }
+        if(scale != 0.0){
+            //get the unit vector of the angular velocity
+            s_nv(3,1/scale,omega);
+            double skew[9]{0,0,0,0,0,0,0,0,0};
+            s_cm3(omega,skew);
+            s_eye(3,rm);
+            s_mma(3,3,3,(1.0-std::cos(scale)),skew,skew,rm);
+            s_ma(3,3,std::sin(scale),skew,rm);
+            double result[9]{0,0,0,0,0,0,0,0,0};
+            s_mma(3,3,3,rm,rm_init,result);
+            dsp(3,3,result);
+            //avoid zero torque
+            if(!std::isnan(result[0])){
+                s_rm2re(result,re,eu_type);
+            }
+        }
+
+
+        std::cout<<re[0]<<"   "<<re[1]<<"   "<<re[2]<<std::endl;
+        std::copy(re, re+3,s_tcp+3);
+
+        //inverse kinematic calculation
         ee.setMpe(s_tcp, eu_type);
         model()->solverPool()[0].kinPos();
         double x_joint[6];
