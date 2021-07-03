@@ -7,6 +7,8 @@
 namespace robot
 {
     //其他参数和函数声明
+
+    void moveTo(double* , double *);
     using Size = std::size_t;
     constexpr double PI = 3.141592653589793;
     class MoveS :public aris::core::CloneObject<MoveS, aris::plan::Plan>
@@ -86,6 +88,42 @@ namespace robot
         Drag(Drag &);
         Drag& operator=(const Drag &);
         Drag& operator=(Drag &&);
+
+    private:
+        struct Imp;
+        aris::core::ImpPtr<Imp> imp_;
+    };
+
+    class DragTrans : public aris::core::CloneObject<DragTrans, aris::plan::Plan>
+    {
+    public:
+        auto virtual prepareNrt()->void;
+        auto virtual executeRT()->int;
+        auto virtual collectNrt()->void;
+        virtual ~DragTrans();
+        explicit DragTrans(const std::string &name = "DragTrans");
+        DragTrans(const DragTrans &);
+        DragTrans(DragTrans &);
+        DragTrans& operator=(const DragTrans &);
+        DragTrans& operator=(DragTrans &&);
+
+    private:
+        struct Imp;
+        aris::core::ImpPtr<Imp> imp_;
+    };
+
+    class DragRot : public aris::core::CloneObject<DragRot, aris::plan::Plan>
+    {
+    public:
+        auto virtual prepareNrt()->void;
+        auto virtual executeRT()->int;
+        auto virtual collectNrt()->void;
+        virtual ~DragRot();
+        explicit DragRot(const std::string &name = "DragRot");
+        DragRot(const DragRot &);
+        DragRot(DragRot &);
+        DragRot& operator=(const DragRot &);
+        DragRot& operator=(DragRot &&);
 
     private:
         struct Imp;
