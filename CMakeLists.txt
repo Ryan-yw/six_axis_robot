@@ -26,7 +26,7 @@ endif(WIN32)
 include_directories(${kaanh_INCLUDE_DIRS})
 
 message(${aris_DIR} ${kaanh_DIR})
-add_executable(sixaxisrobot src/main.cpp src/robot.cpp src/robot.h src/plan.cpp src/plan.h src/planRT.cpp src/planRT.h)
+add_executable(sixaxisrobot src/main.cpp src/robot.cpp src/robot.h src/plan.cpp src/plan.h src/planRT.cpp src/planRT.h src/serial.cpp src/serial.h)
 
 file(COPY src/kaanh.xml DESTINATION ./)
 

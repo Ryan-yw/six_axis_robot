@@ -42,20 +42,31 @@ namespace robot
         aris::core::ImpPtr<Imp> imp_;
     };
 
+//    class MoveTest :public aris::core::CloneObject<MoveTest, aris::plan::Plan>
+//    {
+//    public:
+//        auto virtual prepareNrt()->void;
+//        auto virtual executeRT()->int;
+//        auto virtual collectNrt()->void;
+//        virtual ~MoveTest();
+//        explicit MoveTest(const std::string &name = "mv_test");
+//    //    ARIS_REGISTER_TYPE(MoveTest);
+//        MoveTest(const MoveTest &);
+//        MoveTest(MoveTest &);
+//        MoveTest& operator=(const MoveTest &);
+//        MoveTest& operator=(MoveTest &&);
+//        double dir_{1};
+//    };
     class MoveTest :public aris::core::CloneObject<MoveTest, aris::plan::Plan>
     {
     public:
         auto virtual prepareNrt()->void;
         auto virtual executeRT()->int;
-        auto virtual collectNrt()->void;
-        virtual ~MoveTest();
+
         explicit MoveTest(const std::string &name = "mv_test");
     //    ARIS_REGISTER_TYPE(MoveTest);
-        MoveTest(const MoveTest &);
-        MoveTest(MoveTest &);
-        MoveTest& operator=(const MoveTest &);
-        MoveTest& operator=(MoveTest &&);
-        double dir_{1};
+
+        double dir_;
     };
 
     class ImpedPos : public aris::core::CloneObject<ImpedPos, aris::plan::Plan>
@@ -124,6 +135,62 @@ namespace robot
         DragRot(DragRot &);
         DragRot& operator=(const DragRot &);
         DragRot& operator=(DragRot &&);
+
+    private:
+        struct Imp;
+        aris::core::ImpPtr<Imp> imp_;
+    };
+
+    double moveto(double q0, double qf, double t, double t0);
+
+    class Moveto : public aris::core::CloneObject<Moveto, aris::plan::Plan>
+    {
+    public:
+        auto virtual prepareNrt()->void;
+        auto virtual executeRT()->int;
+        auto virtual collectNrt()->void;
+        virtual ~Moveto();
+        explicit Moveto(const std::string &name = "Moveto");
+        Moveto(const Moveto &);
+        Moveto(Moveto &);
+        Moveto& operator=(const Moveto &);
+        Moveto& operator=(Moveto &&);
+
+    private:
+        struct Imp;
+        aris::core::ImpPtr<Imp> imp_;
+    };
+
+//    class Imu : public aris::core::CloneObject<Imu, aris::plan::Plan>
+//    {
+//    public:
+//        auto virtual prepareNrt()->void;
+//        auto virtual executeRT()->int;
+//        auto virtual collectNrt()->void;
+//        virtual ~Imu();
+//        explicit Imu(const std::string &name = "Imu");
+//        Imu(const Imu &);
+//        Imu(Imu &);
+//        Imu& operator=(const Imu &);
+//        Imu& operator=(Imu &&);
+
+//    private:
+//        struct Imp;
+//        aris::core::ImpPtr<Imp> imp_;
+//    };
+
+    class FitTog : public aris::core::CloneObject<FitTog, aris::plan::Plan>
+    {
+    public:
+        auto virtual prepareNrt()->void;
+        auto virtual executeRT()->int;
+        auto virtual collectNrt()->void;
+        virtual ~FitTog();
+        explicit FitTog(const std::string &name = "FitTog");
+        FitTog(const FitTog &);
+        FitTog(FitTog &);
+        FitTog& operator=(const FitTog &);
+        FitTog& operator=(FitTog &&);
 
     private:
         struct Imp;

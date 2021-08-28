@@ -42,5 +42,24 @@ public:
     ~Curve() {}
 };
 
+class Speed {
+public:
+    double acc_;
+    double v_rch_;
+    double acc_time;
+
+    double speed_[];
+
+    auto getVnow(int count) -> double;
+
+    Speed( double v = 0.4, double a =0.1){
+        v_rch_ = v;
+        acc_ = a;
+        acc_time = v / a;
+    }
+
+    ~Speed() {}
+};
+
 
 #endif //SIXAXISROBOT_PLANRT_H

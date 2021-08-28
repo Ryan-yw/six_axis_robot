@@ -66,3 +66,13 @@ auto Curve::getCurve(int count) -> double {
 
 }
 
+auto Speed::getVnow(int count) -> double {
+    double v_now = 0;
+    if(count <= acc_time * 1000){
+        v_now = acc_ * count / 1000;
+    }
+    else{
+        v_now = v_rch_;
+    }
+    return v_now;
+}
