@@ -197,7 +197,23 @@ namespace robot
         aris::core::ImpPtr<Imp> imp_;
     };
 
+    class Test : public aris::core::CloneObject<Test, aris::plan::Plan>
+    {
+    public:
+        auto virtual prepareNrt()->void;
+        auto virtual executeRT()->int;
+        auto virtual collectNrt()->void;
+        virtual ~Test();
+        explicit Test(const std::string &name = "Test");
+        Test(const Test &);
+        Test(Test &);
+        Test& operator=(const Test &);
+        Test& operator=(Test &&);
 
+    private:
+        struct Imp;
+        aris::core::ImpPtr<Imp> imp_;
+    };
 
 //
 
