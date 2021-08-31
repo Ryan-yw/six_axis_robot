@@ -142,6 +142,8 @@ namespace robot
     };
 
     double moveto(double q0, double qf, double t, double t0);
+    double moveto(double q0, double qf, double t, double t0, double alim, double vlim);
+    double moveto(const double *q0s,const double *qfs, double t, double t0,const double *alims,const double *vlims, double *result);
 
     class Moveto : public aris::core::CloneObject<Moveto, aris::plan::Plan>
     {
@@ -161,23 +163,24 @@ namespace robot
         aris::core::ImpPtr<Imp> imp_;
     };
 
-//    class Imu : public aris::core::CloneObject<Imu, aris::plan::Plan>
-//    {
-//    public:
-//        auto virtual prepareNrt()->void;
-//        auto virtual executeRT()->int;
-//        auto virtual collectNrt()->void;
-//        virtual ~Imu();
-//        explicit Imu(const std::string &name = "Imu");
-//        Imu(const Imu &);
-//        Imu(Imu &);
-//        Imu& operator=(const Imu &);
-//        Imu& operator=(Imu &&);
 
-//    private:
-//        struct Imp;
-//        aris::core::ImpPtr<Imp> imp_;
-//    };
+    class Trapezoid : public aris::core::CloneObject<Trapezoid, aris::plan::Plan>
+    {
+    public:
+        auto virtual prepareNrt()->void;
+        auto virtual executeRT()->int;
+        auto virtual collectNrt()->void;
+        virtual ~Trapezoid();
+        explicit Trapezoid(const std::string &name = "Trapezoid");
+        Trapezoid(const Trapezoid &);
+        Trapezoid(Trapezoid &);
+        Trapezoid& operator=(const Trapezoid &);
+        Trapezoid& operator=(Trapezoid &&);
+
+    private:
+        struct Imp;
+        aris::core::ImpPtr<Imp> imp_;
+    };
 
     class FitTog : public aris::core::CloneObject<FitTog, aris::plan::Plan>
     {

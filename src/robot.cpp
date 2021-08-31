@@ -687,13 +687,7 @@ MoveTest::MoveTest(const std::string &name)
             return -1;
         }
 
-        static aris::Size total_count = 1;
-        if (enable_mvJoint.load()) {
-            total_count = count() + 1000;
-            return 1;
-        } else {
-            return total_count - count();
-        }
+        return 1;
     }
     auto MoveJoint::collectNrt() -> void {}
     MoveJoint::~MoveJoint() = default;
@@ -944,13 +938,7 @@ MoveTest::MoveTest(const std::string &name)
             return -1;
         }
 
-        static aris::Size total_count = 1;
-        if (enable_mvJoint.load()) {//???
-            total_count = count() + 1000;
-            return 1;
-        } else {
-            return total_count - count();
-        }
+        return 1;
     }
     auto ImpedPos::collectNrt() -> void{}
     ImpedPos::~ImpedPos() = default;
@@ -1188,13 +1176,7 @@ MoveTest::MoveTest(const std::string &name)
             return 0;
         }
 
-        static aris::Size total_count = 1;
-        if (enable_mvJoint.load()) {//???
-            total_count = count() + 1000;
-            return 1;
-        } else {
-            return total_count - count();
-        }
+        return 1;
     }
     auto Drag::collectNrt() -> void{}
     Drag::~Drag() = default;
@@ -1384,13 +1366,7 @@ MoveTest::MoveTest(const std::string &name)
             return 0;
         }
 
-        static aris::Size total_count = 1;
-        if (enable_mvJoint.load()) {//???
-            total_count = count() + 1000;
-            return 1;
-        } else {
-            return total_count - count();
-        }
+        return 1;
     }
     auto DragTrans::collectNrt() -> void{}
     DragTrans::~DragTrans() = default;
@@ -1491,17 +1467,7 @@ MoveTest::MoveTest(const std::string &name)
             }
         };
         //the function to update model according to real motor and excecute one forward kinematic
-        auto forwardPos = [&](){
-            for(std::size_t i =0; i<motionNum; ++i)
-            {
-                model()->motionPool()[i].setMp(controller()->motionPool()[i].targetPos());
-            }
-            if(model()->solverPool()[1].kinPos())
-            {
-                std::cout<<"forward kinematic failed, exit"<<std::endl;
-            }
-            ee.updMpm();
-            };
+
 
         for(std::size_t i =0; i<motionNum; ++i)
         {
@@ -1618,13 +1584,7 @@ MoveTest::MoveTest(const std::string &name)
             std::cout<<"finished"<<std::endl;
             return 0;
         }
-        static aris::Size total_count = 1;
-        if (enable_mvJoint.load()) {//???
-            total_count = count() + 1000;
-            return 1;
-        } else {
-            return total_count - count();
-        }
+        return 1;
     }
     auto DragRot::collectNrt() -> void{}
     DragRot::~DragRot() = default;
@@ -1634,18 +1594,20 @@ MoveTest::MoveTest(const std::string &name)
         const static double A = 0.1;
         static double v = 0.1;
         static double a = 0.1;
+        const static double vel_joint_limit[6]{0.3,0.3,0.3,0.6,0.6,1.0};
+        const static double acc_joint_limit[6]{0.3,0.3,0.3,0.6,0.6,1.0};
 
-        static double speed[6]{0,0,0,0,0,0};
-        static double target[6];
-        static double now[6];
-        double
-        moveto(double q0, double qf, double t0, double t){
+
+        double moveto(double q0, double qf, double t0, double t){
             //normal case
             std::cout<<"q0 : "<<q0<<std::endl;
             std::cout<<"qf : "<<qf<<std::endl;
             if(qf - q0 < 0){
                 v = - V;
                 a = - A;
+            }else{
+                v = V;
+                a = A;
             }
             t = (t - t0)* 0.001;
             if(abs(qf - q0) > (V * V / A)){
@@ -1689,8 +1651,137 @@ MoveTest::MoveTest(const std::string &name)
                 }
                 std::cout<<"s : "<<s<<std::endl;
                 return s;
-
             }
+        }
+
+        double moveto(double q0, double qf, double t0, double t, double alim, double vlim){
+            //normal case
+            alim = abs(alim);
+            vlim = abs(vlim);
+            std::cout<<"q0 : "<<q0<<std::endl;
+            std::cout<<"qf : "<<qf<<std::endl;
+            if(qf - q0 < 0){
+                v = - vlim;
+                a = - alim;
+            }else{
+                v = vlim;
+                a = alim;
+            }
+            t = (t - t0)* 0.001;
+            if(abs(qf - q0) > (vlim * vlim / alim)){
+                double tf = v / a + (qf - q0) / v;
+                std::cout<<"tf : "<<tf<<std::endl;
+                double tb = tf - abs((qf - q0)/ v);
+                std::cout<<"tb : "<<tb<<std::endl;
+                double s = 0;
+                std::cout<<"t : "<<t<<std::endl;
+                if(t>=tf){
+                    s = qf;
+                    std::cout<<"stage 4 "<<std::endl;
+                }else if((t) <= tb){
+                    s = q0 + 0.5*a*t*t;
+                    std::cout<<"stage 1 "<<std::endl;
+                }else if((t)> tf - tb){
+                    s = qf - 0.5*a*tf*tf + a*tf*t - 0.5*a*t*t;
+                    std::cout<<"stage 3 "<<std::endl;
+                }else{
+                    s = 0.5*(qf + q0 - v*tf) + v*t;
+                    std::cout<<"stage 2 "<<std::endl;
+                }
+                std::cout<<"s : "<<s<<std::endl;
+                return s;
+            }else{
+                double tb = std::sqrt(abs((q0 - qf)/a));
+                double vmax = (qf - q0)>0?std::sqrt(abs((q0 - qf ) * a)):-std::sqrt(abs((q0 - qf ) * a));
+                double s = 0;
+                std::cout<<"tb : "<<tb<<std::endl;
+                std::cout<<"vmax : "<<vmax<<std::endl;
+                std::cout<<"t : "<<t<<std::endl;
+                if(t>=2*tb){
+                    s = qf;
+                    std::cout<<"stage 3 "<<std::endl;
+                }else if( (t) < tb ){
+                    s =  q0 + 0.5 * a * t * t;
+                    std::cout<<"stage 1 "<<std::endl;
+                }else{
+                    s = 2*q0 - qf + 2 * vmax * t - 0.5 * a * t * t; //?
+                    std::cout<<"stage 2 "<<std::endl;
+                }
+                std::cout<<"s : "<<s<<std::endl;
+                return s;
+            }
+        }
+
+        double moveto(const double* q0s, const double* qfs, double t0, double t, const double* alims, const double* vlims, double * result){
+            //input check
+            if(sizeof (q0s)!= 6|| sizeof(qfs)!=6 || sizeof(alims)!= 6|| sizeof(vlims) !=6|| sizeof(result) != 6){
+                std::cout<<"input dimension should be six!!!"<<std::endl;
+                return false;
+            }
+            double alim, vlim, q0, qf;
+            double num_of_complete = 0;
+
+
+            for(std::size_t i = 0; i < 6; i++){
+                //normal case
+                alim = abs(alims[i]);
+                vlim = abs(vlims[i]);
+                q0 = q0s[i];
+                qf = qfs[i];
+                if(qf - q0 < 0){
+                    v = - vlim;
+                    a = - alim;
+                }else{
+                    v = vlim;
+                    a = alim;
+                }
+                t = (t - t0)* 0.001;
+                if(abs(qf - q0) > (vlim * vlim / alim)){
+                    double tf = v / a + (qf - q0) / v;
+                    std::cout<<"tf : "<<tf<<std::endl;
+                    double tb = tf - abs((qf - q0)/ v);
+                    std::cout<<"tb : "<<tb<<std::endl;
+                    double s = 0;
+                    std::cout<<"t : "<<t<<std::endl;
+                    if(t>=tf){
+                        s = qf;
+                        num_of_complete += 1;
+                        std::cout<<"stage 4 "<<std::endl;
+                    }else if((t) <= tb){
+                        s = q0 + 0.5*a*t*t;
+                        std::cout<<"stage 1 "<<std::endl;
+                    }else if((t)> tf - tb){
+                        s = qf - 0.5*a*tf*tf + a*tf*t - 0.5*a*t*t;
+                        std::cout<<"stage 3 "<<std::endl;
+                    }else{
+                        s = 0.5*(qf + q0 - v*tf) + v*t;
+                        std::cout<<"stage 2 "<<std::endl;
+                    }
+                    std::cout<<"s : "<<s<<std::endl;
+                    result[i] = s;
+                }else{
+                    double tb = std::sqrt(abs((q0 - qf)/a));
+                    double vmax = (qf - q0)>0?std::sqrt(abs((q0 - qf ) * a)):-std::sqrt(abs((q0 - qf ) * a));
+                    double s = 0;
+                    std::cout<<"tb : "<<tb<<std::endl;
+                    std::cout<<"vmax : "<<vmax<<std::endl;
+                    std::cout<<"t : "<<t<<std::endl;
+                    if(t>=2*tb){
+                        s = qf;
+                        num_of_complete +=1;
+                        std::cout<<"stage 3 "<<std::endl;
+                    }else if( (t) < tb ){
+                        s =  q0 + 0.5 * a * t * t;
+                        std::cout<<"stage 1 "<<std::endl;
+                    }else{
+                        s = 2*q0 - qf + 2 * vmax * t - 0.5 * a * t * t; //?
+                        std::cout<<"stage 2 "<<std::endl;
+                    }
+                    std::cout<<"s : "<<s<<std::endl;
+                    result[i] = s;
+                }
+            }
+            return num_of_complete;
         }
 
             /*-----------Move to ------------*/
@@ -1740,29 +1831,6 @@ MoveTest::MoveTest(const std::string &name)
                         THROW_FILE_LINE("");
                     }
                 }
-//                else if (cmd_param.first == "Mass"){
-//                    auto m = matrixParam(cmd_param.first);
-//                    if (m.size() == 6) {
-//                        std::copy(m.data(), m.data() + 6, imp_->M);
-//                    }else if (m.size() == 1) {
-//                        std::copy(m.data(), m.data()+1, imp_->M+3);
-//                        std::copy(m.data(), m.data() + 1, imp_->M+4);
-//                        std::copy(m.data(), m.data() + 1, imp_->M+5);
-//                    }else{
-//                        THROW_FILE_LINE("");
-//                    }
-//                }else if(cmd_param.first == "Damp"){
-//                    auto m = matrixParam(cmd_param.first);
-//                    if (m.size() == 6) {
-//                        std::copy(m.data(), m.data() + 6, imp_->B);
-//                    }else if (m.size() == 1) {
-//                        std::copy(m.data(), m.data()+1, imp_->B+3);
-//                        std::copy(m.data(), m.data() + 1, imp_->B+4);
-//                        std::copy(m.data(), m.data() + 1, imp_->B+5);
-//                    }else{
-//                        THROW_FILE_LINE("");
-//                    }
-//                }
             }
             for (auto &option : motorOptions())//???
             {
@@ -1775,7 +1843,6 @@ MoveTest::MoveTest(const std::string &name)
         auto Moveto::executeRT() ->int
         {
             std::cout << "moveto!" << std::endl;
-            const int FS_NUM = 7;
             static std::size_t motionNum = controller()->motionPool().size();
             // end-effector //
             auto &ee = model()->generalMotionPool()[0];
@@ -1785,8 +1852,6 @@ MoveTest::MoveTest(const std::string &name)
             char eu_type[4]{'1', '2', '3', '\0'};
             // the lambda function to get the force
             //the function to update model according to real motor and excecute one forward kinematic
-
-
             for(std::size_t i =0; i<motionNum; ++i)
             {
                 model()->motionPool()[i].setMp(controller()->motionPool()[i].targetPos());
@@ -1809,23 +1874,12 @@ MoveTest::MoveTest(const std::string &name)
                 double theta = (-imp_->theta_setup) * PI / 180;
                 double pq_setup[7]{0.0, 0.0, imp_->pos_setup, 0.0, 0.0, sin(theta / 2.0), cos(theta / 2.0)};
                 s_pq2pm(pq_setup, imp_->fs2tpm);
-
-
                 imp_->start = count();
-
-
-
             }
-
-
             double s_tcp[6];
             //get the position of tool center
             std::copy(imp_->start_pos, imp_->start_pos+6, s_tcp);
-
-
             s_tcp[2] = moveto(imp_->start_pos[2], imp_->start_pos[2] + 0.05, imp_->start, count());
-
-
             //inverse kinematic calculation
             ee.setMpe(s_tcp, eu_type);
             model()->solverPool()[0].kinPos();
@@ -1842,188 +1896,167 @@ MoveTest::MoveTest(const std::string &name)
                 std::cout<<"finished"<<std::endl;
                 return 0;
             }
-            static aris::Size total_count = 1;
-            if (enable_mvJoint.load()) {//???
-                total_count = count() + 1000;
-                return 1;
-            } else {
-                return total_count - count();
-            }
+            return 1;
         }
         auto Moveto::collectNrt() -> void{}
         Moveto::~Moveto() = default;
         Moveto::Moveto(const Moveto &other) = default;
 
-        /*-----------Imu------------*/
-//        Imu::Imu(const std::string &name){
-//            aris::core::fromXmlString(command(),
-//                                      "<Command name=\"imu\">"
-//                                      "	<GroupParam>"
-//                                      "		<Param name=\"vellimit\" default=\"{0.2,0.2,0.1,0.5,0.5,0.5}\"/>"
-//                                      "		<Param name=\"tool\" default=\"tool0\"/>"
-//                                      "		<Param name=\"wobj\" default=\"wobj0\"/>"
-//                                      "	</GroupParam>"
-//                                      "</Command>"
-//                                      );
-//        }
-//        struct ImuParam{
-//            aris::dynamic::Marker * tool, * wobj;
-//            //parameters in prepareNT
-//            double x_e; //environment position
-//            double vel_limit[6];//the velocity limitation of motors
-//            //parameters in excuteRT
-//            double pm_init[16];//the position matrix of the tool center in world frame
-//            double theta_setup = -90;// the install angle of force sensor
-//            double pos_setup = 0.061;// the install position of force sensor
-//            double fs2tpm[16]; //
-//            float init_force[6]; // compensate the gravity of tool
-//            double ke = 220000;
+        /*-----------Trapezoid ------------*/
+    Trapezoid::Trapezoid(const std::string &name){
+        aris::core::fromXmlString(command(),
+                                  "<Command name=\"trap\">"
+                                  "	<GroupParam>"
+                                  "		<Param name=\"vellimit\" default=\"{0.2,0.2,0.1,0.5,0.5,0.5}\"/>"
+                                  "		<Param name=\"tool\" default=\"tool0\"/>"
+                                  "		<Param name=\"wobj\" default=\"wobj0\"/>"
+                                  "     <Param name=\"Motorindex\" default=\"{5}\" abbreviation=\"n\"/>"
+                                  "     <Param name=\"offset\" default=\"{0.5}\" abbreviation=\"o\"/>"
+                                  "     <Param name=\"lim\" default=\"{0.1,0.1}\" abbreviation=\"l\"/>"
+                                  "	</GroupParam>"
+                                  "</Command>"
+                                  );
+    }
 
-//            imu::Data data;// the structure which store the datas from imu
-//            double loop_period = 1e-3;
-//            double last_v[6]{0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-//        };
-//        struct Imu::Imp : public ImuParam{};
-//        auto Imu::prepareNrt() -> void
+    struct TrapezoidParam{
+        aris::dynamic::Marker * tool, * wobj;
+        //parameters in prepareNT
+        double x_e; //environment position
+        double vel_limit[6];//the velocity limitation of motors
+        //parameters in excuteRT
+        double pm_init[16];//the position matrix of the tool center in world frame
+        double theta_setup = -90;// the install angle of force sensor
+        double pos_setup = 0.061;// the install position of force sensor
+        double fs2tpm[16]; // force sensor to tool center position matrix
+        double start = 0;
+        double start_pos_joint[6];
+        double start_pos_cartesian[6];
+        double motorindex = -1;
+        double offset = -1;
+        double lim[2];
+    };
+    struct Trapezoid::Imp : public TrapezoidParam{};
+    auto Trapezoid::prepareNrt() -> void
+    {
+        std::cout<<"prepare begin"<<std::endl;
+        imp_->tool = &*model()->generalMotionPool()[0].makI()->fatherPart().findMarker(cmdParams().at("tool"));
+        imp_->wobj = &*model()->generalMotionPool()[0].makJ()->fatherPart().findMarker(cmdParams().at("wobj"));
+        imp_-> x_e = 0;
+        for (auto cmd_param : cmdParams()) {
+            if (cmd_param.first == "vellimit") {
+                auto a = matrixParam(cmd_param.first);
+                if (a.size() == 6) {
+                    std::copy(a.data(), a.data() + 6, imp_->vel_limit);
+                } else {
+                    THROW_FILE_LINE("");
+                }
+            }
+            else if (cmd_param.first == "Motorindex"){
+                    auto m = matrixParam(cmd_param.first);
+                    if (m.size() == 1) {
+                        imp_->motorindex = *m.data();
+                    }else{
+                        THROW_FILE_LINE("");
+                    }
+            }
+            else if (cmd_param.first == "offset"){
+                auto m = matrixParam(cmd_param.first);
+                if (m.size() == 1) {
+                        imp_->offset = *m.data();
+                }else{
+                    THROW_FILE_LINE("");
+                }
+            }
+            else if (cmd_param.first == "lim"){
+                auto m = matrixParam(cmd_param.first);
+                if (m.size() == 2) {
+                    std::copy(m.data(), m.data() + 1, imp_->lim);
+                    std::copy(m.data()+1, m.data() + 2, imp_->lim+1);
+                }else{
+                    THROW_FILE_LINE("");
+                }
+            }
+        }
+        for (auto &option : motorOptions())//???
+        {
+            option |= aris::plan::Plan::NOT_CHECK_POS_CONTINUOUS_SECOND_ORDER |NOT_CHECK_VEL_CONTINUOUS;
+        }
+        std::vector <std::pair<std::string, std::any>> ret_value;
+        ret() = ret_value;
+        std::cout<<"prepare finished"<<std::endl;
+    }
+    auto Trapezoid::executeRT() ->int
+    {
+        std::cout << "moveto!" << std::endl;
+        static std::size_t motionNum = controller()->motionPool().size();
+        // end-effector //
+        auto &ee = model()->generalMotionPool()[0];
+        // Function Pointer
+//        auto &cout = controller()->mout();
+//        auto &lout = controller()->lout();
+        char eu_type[4]{'1', '2', '3', '\0'};
+        //the lambda function to get the force
+        //the function to update model according to real motor and excecute one forward kinematic
+
+
+        for(std::size_t i =0; i<motionNum; ++i)
+        {
+            model()->motionPool()[i].setMp(controller()->motionPool()[i].targetPos());
+        }
+        if (model()->solverPool().at(1).kinPos()){
+            std::cout<<"forward kinematic failed";
+            return -1;
+        }else{
+            ee.updMpm();
+        }
+        //first loop record
+        if(count() ==1)
+        {
+            for(std::size_t i =0; i<motionNum; ++i)
+            {
+                imp_->start_pos_joint[i] = model()->motionPool()[i].mp();
+            }
+            //get the current end effector position
+            ee.getMpm(imp_->pm_init);
+            ee.getMpe(imp_->start_pos_cartesian,eu_type);
+            //set the log file
+            controller()->logFileRawName("motion_replay");
+            //get the force transformation matrix in tool frame
+            double theta = (-imp_->theta_setup) * PI / 180;
+            double pq_setup[7]{0.0, 0.0, imp_->pos_setup, 0.0, 0.0, sin(theta / 2.0), cos(theta / 2.0)};
+            s_pq2pm(pq_setup, imp_->fs2tpm);
+            imp_->start = count();
+        }
+        double target = imp_->start_pos_joint[int(imp_->motorindex)]+imp_->offset;
+        double newPos = moveto(imp_->start_pos_joint[int(imp_->motorindex)],target,imp_->start, count(),imp_->lim[0], imp_->lim[1]);
+        controller()->motionPool()[std::size_t(imp_->motorindex)].setTargetPos(newPos);
+//        double s_tcp[6];
+//        //get the position of tool center
+//        std::copy(imp_->start_pos_cartesian, imp_->start_pos_cartesian+6, s_tcp);
+//        s_tcp[2] = moveto(imp_->start_pos_cartesian[2], imp_->start_pos_cartesian[2] + 0.05, imp_->start, count());
+//        //inverse kinematic calculation
+//        ee.setMpe(s_tcp, eu_type);
+//        model()->solverPool()[0].kinPos();
+//        double x_joint[6];
+//        for(std::size_t i = 0; i<motionNum; ++i)
 //        {
-//            std::cout<<"prepare begin"<<std::endl;
-//            imp_->tool = &*model()->generalMotionPool()[0].makI()->fatherPart().findMarker(cmdParams().at("tool"));
-//            imp_->wobj = &*model()->generalMotionPool()[0].makJ()->fatherPart().findMarker(cmdParams().at("wobj"));
-//            imp_-> x_e = 0;
-//            for (auto cmd_param : cmdParams()) {
-//                if (cmd_param.first == "vellimit") {
-//                    auto a = matrixParam(cmd_param.first);
-//                    if (a.size() == 6) {
-//                        std::copy(a.data(), a.data() + 6, imp_->vel_limit);
-//                    } else {
-//                        THROW_FILE_LINE("");
-//                    }
-//                }
-//            }
-//            for (auto &option : motorOptions())//???
-//            {
-//                option |= aris::plan::Plan::NOT_CHECK_POS_CONTINUOUS_SECOND_ORDER |NOT_CHECK_VEL_CONTINUOUS;
-//            }
-//            if(imu::initIMU()){
-//                std::cout<<"initIMU() failed";
-//            }
-//            std::vector <std::pair<std::string, std::any>> ret_value;
-//            ret() = ret_value;
-//            std::cout<<"prepare finished"<<std::endl;
+//            model()->motionPool()[i].updMp();
+//            x_joint[i] = model()->motionPool()[i].mp();
+//            if(x_joint[5]<0){x_joint[5] += 2*PI;std::cout<<"x_joint[5] : "<<x_joint[5];}
+//            if(x_joint[4]<0){x_joint[4] += 2*PI;std::cout<<"x_joint[4] : "<<x_joint[4];}
+//            controller()->motionPool()[i].setTargetPos(x_joint[i]);
 //        }
-//        auto Imu::executeRT() ->int
-//        {
-//            const int FS_NUM = 7;
-//            static std::size_t motionNum = controller()->motionPool().size();
-//            // end-effector //
-//            auto &ee = model()->generalMotionPool()[0];
-//            // Function Pointer
-//    //        auto &cout = controller()->mout();
-//    //        auto &lout = controller()->lout();
-//            char eu_type[4]{'1', '2', '3', '\0'};
-//            // the lambda function to get the force
-//            auto get_force_data = [&](float *data){
-//                for (std::size_t i =0; i< motionNum;++i)
-//                {
-//                    this->ecController()->slavePool()[FS_NUM].readPdo(0x6020, i + 11, data + i, 32);
-//                }
-//            };
+        if(count() > 4000 && newPos == target){
+            std::cout<<"finished"<<std::endl;
+            return 0;
+        }
+        return 1;
+    }
+    auto Trapezoid::collectNrt() -> void{}
+    Trapezoid::~Trapezoid() = default;
+    Trapezoid::Trapezoid(const Trapezoid &other) = default;
 
 
-//            for(std::size_t i =0; i<motionNum; ++i)
-//            {
-//                model()->motionPool()[i].setMp(controller()->motionPool()[i].targetPos());
-//            }
-//            if (model()->solverPool().at(1).kinPos()){
-//                std::cout<<"forward kinematic failed";
-//                return -1;
-//            }else{
-//                ee.updMpm();
-//            }
-//            //first loop record
-//            if(count() ==1)
-//            {
-//                //get the current end effector position
-//                ee.getMpm(imp_->pm_init);
-//                //set the log file
-//                controller()->logFileRawName("motion_replay");
-//                //get the force transformation matrix in tool frame
-//                double theta = (-imp_->theta_setup) * PI / 180;
-//                double pq_setup[7]{0.0, 0.0, imp_->pos_setup, 0.0, 0.0, sin(theta / 2.0), cos(theta / 2.0)};
-//                s_pq2pm(pq_setup, imp_->fs2tpm);
-//                get_force_data(imp_->init_force);
-//                //initialize the imu sensor
-
-
-//            }
-//            //减去力传感器初始偏置
-//            float force_data[6]{0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-//            double force_data_double[6];
-//            get_force_data(force_data);
-//            for (int i = 0; i < 6; i++)
-//                force_data[i] -= imp_->init_force[i];
-//            for (int i = 0; i < 6; ++i)force_data_double[i] = static_cast<double>(force_data[i]);
-//            //获取每个周期末端所受的力
-//            double xyz_temp[3]{force_data_double[0], force_data_double[1], force_data_double[2]}, abc_temp[3]{
-//                    force_data_double[3], force_data_double[4], force_data_double[5]};
-//            //get the position of tcp
-//            double pm_begin[16];
-//            //transform the force to world frame, store in imp_->force_target
-//            model()->generalMotionPool().at(0).updMpm();
-//            imp_->tool->getPm(*imp_->wobj, pm_begin);
-//            double t2bpm[16];
-//            s_pm_dot_pm(pm_begin, imp_->fs2tpm, t2bpm);
-//            double net_force[6];
-//            s_mm(3, 1, 3, t2bpm, aris::dynamic::RowMajor{4}, xyz_temp, 1, net_force, 1);
-//            s_mm(3, 1, 3, t2bpm, aris::dynamic::RowMajor{4}, abc_temp, 1, net_force + 3, 1);
-//            //print the force of z
-//            if (count() % 100 == 0) {
-//                std::cout << "fz:" << net_force[0] ;//<< " v_tcp[2] : "<<v_tcp[2];
-//                std::cout<<std::endl;
-//            }
-//            double s_tcp[6];
-//            //get the position of tool center
-//            ee.getMpe(s_tcp,eu_type);
-
-//            if(count()%200 == 0){
-//                imp_->data = imu::getCurrentPos();
-//                std::cout<<"yaw = "<<std::setw(12)<<std::right<<imp_->data.yaw<<std::setw(12)<<" pitch = "<<imp_->data.pitch<<std::setw(12)<<" roll = "<<imp_->data.roll;
-//                                    std::cout<<std::endl;
-//                                    std::cout<<"x_acc = "<<std::setw(12)<< imp_->data.x_acc<<std::setw(12)<<" y_acc = "<<std::setw(12)<< imp_->data.y_acc<<std::setw(12)<<" z_acc = "<<imp_->data.z_acc;
-//                                    std::cout<<std::endl;
-//                                    std::cout<<"x_gyro = "<<std::setw(12)<<imp_->data.x_gyro<<std::setw(12)<<" y_gyro = "<<imp_->data.y_gyro<<" z_gyro = "<<imp_->data.z_gyro;
-//                                    std::cout<<std::endl;
-//            }
-
-//            //inverse kinematic calculation
-//            ee.setMpe(s_tcp, eu_type);
-//            model()->solverPool()[0].kinPos();
-//            double x_joint[6];
-//            for(std::size_t i = 0; i<motionNum; ++i)
-//            {
-//                model()->motionPool()[i].updMp();
-//                x_joint[i] = model()->motionPool()[i].mp();
-//                controller()->motionPool()[i].setTargetPos(x_joint[i]);
-//            }
-
-//            if(count() > 20000){
-//                std::cout<<"finished"<<std::endl;
-//                std::cout<<"imu terminated"<<std::endl;
-//                imu::closeIMU();
-//                return 0;
-//            }
-
-//            static aris::Size total_count = 1;
-//            if (enable_mvJoint.load()) {//???
-//                total_count = count() + 1000;
-//                return 1;
-//            } else {
-//                return total_count - count();
-//            }
-//        }
-//        auto Imu::collectNrt() -> void{}
-//        Imu::~Imu() = default;
-//        Imu::Imu(const Imu &other) = default;
 
         /*-----------FitTog------------*/
         FitTog::FitTog(const std::string &name){
@@ -2192,7 +2225,6 @@ MoveTest::MoveTest(const std::string &name)
                 for(std::size_t i = 0; i <  motionNum; ++i){
                     std::cout << "stcp" << i << ": " << s_tcp[i] << std::endl;
                 }
-                moveto;
 
 
 
@@ -2431,7 +2463,7 @@ MoveTest::MoveTest(const std::string &name)
             double start = 0;
             double start_pos[6];
         };
-        struct Test::Imp : public MovetoParam{};
+        struct Test::Imp : public TestParam{};
         auto Test::prepareNrt() -> void
         {
             std::cout<<"prepare begin"<<std::endl;
@@ -2491,6 +2523,7 @@ MoveTest::MoveTest(const std::string &name)
                 std::cout<<"finished"<<std::endl;
                 return 0;
             }
+            return 1;
         }
         auto Test::collectNrt() -> void{}
         Test::~Test() = default;
@@ -2503,6 +2536,7 @@ MoveTest::MoveTest(const std::string &name)
         plan_root->planPool().add<robot::MoveTest>();
         plan_root->planPool().add<robot::MoveJoint>();
         plan_root->planPool().add<robot::ImpedPos>();
+        plan_root->planPool().add<robot::Trapezoid>();
         plan_root->planPool().add<robot::Drag>();
         plan_root->planPool().add<robot::DragTrans>();
         plan_root->planPool().add<robot::DragRot>();
