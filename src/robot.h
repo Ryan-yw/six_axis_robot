@@ -86,7 +86,10 @@ namespace robot
         struct Imp;
         aris::core::ImpPtr<Imp> imp_;
     };
-
+    /**
+     * @brief The Drag class. If a force is applied on the end effector, the end-effctor will both translational and rotational move in world coordinate by admittance control.
+     * @note The admittance control law and the rodrigous functions haven't verified correct.
+     */
     class Drag : public aris::core::CloneObject<Drag, aris::plan::Plan>
     {
     public:
@@ -104,6 +107,10 @@ namespace robot
         struct Imp;
         aris::core::ImpPtr<Imp> imp_;
     };
+    /**
+     * @brief The DragTrans class. If a force is applied on the end effector, the end-effctor will translational move in world coordinate by admittance control.
+     * @note The admittance control law hasn't verified correct.
+     */
 
     class DragTrans : public aris::core::CloneObject<DragTrans, aris::plan::Plan>
     {
@@ -122,6 +129,11 @@ namespace robot
         struct Imp;
         aris::core::ImpPtr<Imp> imp_;
     };
+    /**
+     * @brief The DragRot class. If a force is applied on the end effector, the end-effctor will rotational move in world coordinate by admittance control.
+     * @note The admittance control law and the rodrigous functions haven't verified correct.
+     */
+
 
     class DragRot : public aris::core::CloneObject<DragRot, aris::plan::Plan>
     {
@@ -145,6 +157,9 @@ namespace robot
     double moveto(double q0, double qf, double t, double t0, double alim, double vlim);
     double moveto(const double *q0s,const double *qfs, double t, double t0,const double *alims,const double *vlims, double *result);
 
+    /**
+     * @brief The Moveto class  The end effector moves z+0.5 in world coordinate
+     */
     class Moveto : public aris::core::CloneObject<Moveto, aris::plan::Plan>
     {
     public:
@@ -163,6 +178,9 @@ namespace robot
         aris::core::ImpPtr<Imp> imp_;
     };
 
+    /**
+     * @brief The Trapezoid class
+     */
 
     class Trapezoid : public aris::core::CloneObject<Trapezoid, aris::plan::Plan>
     {

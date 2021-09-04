@@ -301,6 +301,8 @@ MoveTest::MoveTest(const std::string &name)
                    "	<Param name=\"direction\" default=\"1\" abbreviation=\"d\"/>"
                    "</Command>");
 }
+
+
 /*-----------Move Joint------------*/
     static std::atomic_bool enable_mvJoint = true;
     struct MoveJointParam {
@@ -1274,22 +1276,28 @@ MoveTest::MoveTest(const std::string &name)
 //        auto &lout = controller()->lout();
         char eu_type[4]{'1', '2', '3', '\0'};
         // the lambda function to get the force
+
         auto get_force_data = [&](float *data){
-            for (std::size_t i =0; i< motionNum;++i)
+            for (std::size_t i =0; i< 6 ;++i)
             {
                 this->ecController()->slavePool()[FS_NUM].readPdo(0x6020, i + 11, data + i, 32);
             }
         };
+
+
         for(std::size_t i =0; i<motionNum; ++i)
         {
             model()->motionPool()[i].setMp(controller()->motionPool()[i].targetPos());
         }
+
         if (model()->solverPool().at(1).kinPos()){
             std::cout<<"forward kinematic failed";
             return -1;
         }else{
             ee.updMpm();
         }
+
+
         //first loop record
         if(count() ==1)
         {
@@ -1303,6 +1311,7 @@ MoveTest::MoveTest(const std::string &name)
             s_pq2pm(pq_setup, imp_->fs2tpm);
             get_force_data(imp_->init_force);
         }
+
         //减去力传感器初始偏置
         float force_data[6]{0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
         double force_data_double[6];
@@ -1310,9 +1319,11 @@ MoveTest::MoveTest(const std::string &name)
         for (int i = 0; i < 6; i++)
             force_data[i] -= imp_->init_force[i];
         for (int i = 0; i < 6; ++i)force_data_double[i] = static_cast<double>(force_data[i]);
+
+
         //获取每个周期末端所受的力
-        double xyz_temp[3]{force_data_double[0], force_data_double[1], force_data_double[2]}, abc_temp[3]{
-                force_data_double[3], force_data_double[4], force_data_double[5]};
+        double xyz_temp[3]{force_data_double[0], force_data_double[1], force_data_double[2]},
+        abc_temp[3]{ force_data_double[3], force_data_double[4], force_data_double[5]};
         //get the position of tcp
         double pm_begin[16];
         //transform the force to world frame, store in imp_->force_target
@@ -1323,6 +1334,7 @@ MoveTest::MoveTest(const std::string &name)
         double net_force[6];
         s_mm(3, 1, 3, t2bpm, aris::dynamic::RowMajor{4}, xyz_temp, 1, net_force, 1);
         s_mm(3, 1, 3, t2bpm, aris::dynamic::RowMajor{4}, abc_temp, 1, net_force + 3, 1);
+
         //print the force of z
         if (count() % 100 == 0) {
             std::cout << "fz:" << net_force[0] ;//<< " v_tcp[2] : "<<v_tcp[2];
@@ -1330,11 +1342,11 @@ MoveTest::MoveTest(const std::string &name)
         }
         double s_tcp[6];
         //get the position of tool center
-        model()->generalMotionPool().at(0).getMpe(s_tcp,eu_type);
+        ee.getMpe(s_tcp,eu_type);
         double a[6]{0,0,0,0,0,0};
         double v[6]{0,0,0,0,0,0};
         double x[6]{0,0,0,0,0,0};
-
+        //
         for(std::size_t i =0 ;i < 3 ; i++){
             a[i] = (net_force[i])/imp_->M[i];//- imp_->K * (s_tcp[2] - x_r))/imp_->M;
             v[i] = a[i] * imp_->loop_period * imp_->loop_period + imp_->B[i]*imp_->last_v[i];
@@ -1596,12 +1608,22 @@ MoveTest::MoveTest(const std::string &name)
         static double a = 0.1;
         const static double vel_joint_limit[6]{0.3,0.3,0.3,0.6,0.6,1.0};
         const static double acc_joint_limit[6]{0.3,0.3,0.3,0.6,0.6,1.0};
-
+        /**
+         * @brief moveto one dimension trapezoid interpolation, without acc and vel limit
+         * @param q0 start position, 1x1 double
+         * @param qf end position, 1x1 double
+         * @param t0 start time, 1x1 double
+         * @param t time of this loop, 1x1 double
+         * @note t should larger than t0
+         * @return return a position in (q0, qf] at time t
+         */
 
         double moveto(double q0, double qf, double t0, double t){
             //normal case
-            std::cout<<"q0 : "<<q0<<std::endl;
-            std::cout<<"qf : "<<qf<<std::endl;
+            if(t<t0){
+                std::cout<<"t should bigger than t0"<<std::endl;
+                return q0;
+            }
             if(qf - q0 < 0){
                 v = - V;
                 a = - A;
@@ -1654,6 +1676,16 @@ MoveTest::MoveTest(const std::string &name)
             }
         }
 
+        /**
+         * @brief moveto one dimension trapezoid interpolation, with acc and vel limit
+         * @param q0 start position, 1x1 double
+         * @param qf end position, 1x1 double
+         * @param t0 start time, 1x1 double
+         * @param t time of this loop, 1x1 double
+         * @param alim the acceleration limit of one joint
+         * @param vlim the velocity limit of one joint
+         * @return return a position in (q0, qf] at time t
+         */
         double moveto(double q0, double qf, double t0, double t, double alim, double vlim){
             //normal case
             alim = abs(alim);
@@ -1711,6 +1743,17 @@ MoveTest::MoveTest(const std::string &name)
                 return s;
             }
         }
+        /**
+         * @brief moveto 6 dimension trapezoidal interpolation
+         * @param q0s start positions, 6x1 double
+         * @param qfs endl positions, 6x1 double
+         * @param t0 start time, 1x1 double
+         * @param t time now, 1x1 double
+         * @param alims acceleration limit of joints, 6x1 double
+         * @param vlims velocity limit of joints, 6x1 double
+         * @param result the output position, 6x1 double
+         * @return the number of joints which finish movement, min: 0, max: 6
+         */
 
         double moveto(const double* q0s, const double* qfs, double t0, double t, const double* alims, const double* vlims, double * result){
             //input check
@@ -1784,7 +1827,8 @@ MoveTest::MoveTest(const std::string &name)
             return num_of_complete;
         }
 
-            /*-----------Move to ------------*/
+      /*-----------Move to ------------*/
+
         Moveto::Moveto(const std::string &name){
             aris::core::fromXmlString(command(),
                                       "<Command name=\"moveto\">"
@@ -1798,10 +1842,7 @@ MoveTest::MoveTest(const std::string &name)
                                       "</Command>"
                                       );
         }
-//        for(int i =0; i< motionNum;++i)
-//        {
-//            std::cout  << "stcp:" << stcp[i] << std::endl;
-//        }
+
         struct MovetoParam{
             aris::dynamic::Marker * tool, * wobj;
             //parameters in prepareNT
@@ -1927,10 +1968,10 @@ MoveTest::MoveTest(const std::string &name)
         double pm_init[16];//the position matrix of the tool center in world frame
         double theta_setup = -90;// the install angle of force sensor
         double pos_setup = 0.061;// the install position of force sensor
-        double fs2tpm[16]; // force sensor to tool center position matrix
-        double start = 0;
-        double start_pos_joint[6];
-        double start_pos_cartesian[6];
+        double fs2tpm[16]; /*!< force sensor to tool center position matrix */
+        double start = 0; /*!< start time of the movement  */
+        double start_pos_joint[6]; /*!< start position in joint space */
+        double start_pos_cartesian[6]; /*!< start position in cartesian space */
         double motorindex = -1;
         double offset = -1;
         double lim[2];
@@ -2513,16 +2554,17 @@ MoveTest::MoveTest(const std::string &name)
         }
         auto Test::executeRT() ->int
         {
-            const int FS_NUM = 7;
-            static std::size_t motionNum = controller()->motionPool().size();
-            // end-effector //
-            auto &ee = model()->generalMotionPool()[0];
-            char eu_type[4]{'1', '2', '3', '\0'};
-            controller()->motionPool()[5].setTargetPos(0);
-            if(count() > 5000){
-                std::cout<<"finished"<<std::endl;
-                return 0;
-            }
+//            const int FS_NUM = 7;
+//            static std::size_t motionNum = controller()->motionPool().size();
+//            // end-effector //
+//            auto &ee = model()->generalMotionPool()[0];
+//            char eu_type[4]{'1', '2', '3', '\0'};
+            controller()->motionPool()[5].setTargetToq(1);
+            std::cout<<"torque:  "<<controller()->motionPool()[5].actualToq()<<std::endl;
+//            if(count() > 5000){
+//                std::cout<<"finished"<<std::endl;
+//                return 0;
+//            }
             return 1;
         }
         auto Test::collectNrt() -> void{}
